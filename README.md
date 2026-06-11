@@ -109,3 +109,9 @@ and a shareable result. It deliberately avoids manipulative dark patterns —
 no infinite feed, no loot boxes, no fake-urgency timers, no data harvesting.
 
 This is a game. It is **not financial advice.**
+
+## License
+
+[PolyForm Noncommercial License 1.0.0](LICENSE) — Copyright Kacper (2026).
+Free to use, share and modify for any noncommercial purpose. For commercial
+licensing inquiries, contact the copyright holder.

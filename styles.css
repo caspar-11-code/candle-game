@@ -437,11 +437,15 @@ body::before {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   flex-wrap: wrap;
 }
+.footer__links { display: flex; align-items: center; gap: 16px; }
 .link-btn {
   background: none; border: none; color: var(--text-dim); cursor: pointer;
   text-decoration: underline; text-underline-offset: 3px; font-size: 0.74rem; font-family: inherit;
+  padding: 0;
 }
 .link-btn:hover { color: var(--text); }
+.link-btn--gh { display: inline-flex; align-items: center; gap: 6px; }
+.link-btn--gh svg { width: 15px; height: 15px; fill: currentColor; }
 
 /* ---------- Modals ---------- */
 .modal {
