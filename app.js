@@ -1,11 +1,11 @@
 /* ============================================================
-   CANDLE — daily market-reading puzzle (v3)
+   CANDLE — daily market-reading puzzle (v4)
    Pure client-side, no dependencies, no network, no paid services.
 
-   v3 adds: Bollinger Bands, Stochastic, Fibonacci levels
-   (levels 5–6), HARD mode (tag every indicator before you
-   call — separate streak), lesson of the day, PNG share image
-   and an explicit practice "new chart" button.
+   v4 adds: Survival mode (3 lives, sliding chart window),
+   Blitz timer, per-indicator read accuracy with lesson hints,
+   post-game equity curve, calendar heatmap, local badges
+   (also drawn on the share PNG) and progress export/import.
    ============================================================ */
 "use strict";
 
@@ -17,9 +17,14 @@
     ROUNDS: 6,
     PASS: 4,
     EPOCH: new Date(2026, 0, 1),
+    SUR_LIVES: 3,
+    SUR_MAX: 120,
+    BLITZ_S: 10,
+    BLITZ_S_HARD: 25,
   };
   const VISIBLE = CONFIG.HISTORY + CONFIG.ROUNDS;
   const GEN_TOTAL = CONFIG.WARMUP + VISIBLE;
+  const SUR_TOTAL = CONFIG.WARMUP + CONFIG.HISTORY + CONFIG.SUR_MAX;
   const VIS_START = CONFIG.WARMUP;
 
   const ALL_INDS = ["ma", "vol", "rsi", "macd", "sr", "bb", "stoch", "fib"];
@@ -31,11 +36,15 @@
     { id: 5, inds: ["ma", "vol", "rsi", "macd", "sr", "bb", "stoch"] },
     { id: 6, inds: ["ma", "vol", "rsi", "macd", "sr", "bb", "stoch", "fib"] },
   ];
+  // indicator -> index in the LESSONS bank (for the "weakest read" hint)
+  const LESSON_FOR_KEY = { ma: 9, vol: 4, rsi: 6, macd: 10, sr: 7, bb: 15, stoch: 16, fib: 17 };
 
   const KEYS = {
     stats: "candle.stats.v1",
     statsHard: "candle.stats.hard.v1",
     prefs: "candle.prefs.v1",
+    survival: "candle.survival.v1",
+    badges: "candle.badges.v1",
     daily: (n, hard) => `candle.daily${hard ? ".hard" : ""}.v2.${n}`,
   };
 
@@ -44,6 +53,7 @@
     en: {
       tab_daily: "Daily",
       tab_practice: "Practice",
+      tab_survival: "Survival",
       lv_1: "Pure price",
       lv_2: "+ Averages",
       lv_3: "+ Momentum",
@@ -59,6 +69,7 @@
       fb_correct: "Correct — closed {word}.",
       fb_wrong: "Missed — closed {word}.",
       fb_tag_first: "HARD: tag every indicator first.",
+      fb_timeout: "Time's up — counts as a miss!",
       w_green: "green (bull)",
       w_red: "red (bear)",
       w_greens: "green",
@@ -66,6 +77,7 @@
       word_up: "the upside (BULL)",
       word_down: "the downside (BEAR)",
       practice_sub: "Training — fresh chart, does not affect stats",
+      sur_sub: "Survive as long as you can — 3 misses end the run",
       reads_title: "HARD: tag your read on every indicator to unlock the call",
       you_said: "You:",
       ind_name_ma: "Trend (MA)",
@@ -87,6 +99,7 @@
         "Your call matched the signals — the market simply broke the pattern this time. That's trading: think in probabilities, not certainties.",
       an_wrong_mixed:
         "Signals were genuinely mixed — that was near coin-flip territory. Skipping unclear setups is a skill too.",
+      an_timeout: "Time ran out — the market doesn't wait. A skipped call counts as a miss.",
       an_lead: "Signal consensus: {txt}",
       lead_up: "leaning bullish ({s})",
       lead_down: "leaning bearish ({s})",
@@ -136,10 +149,15 @@
       headline_2: "Rough session.",
       headline_1: "The market won today.",
       headline_0: "Brutal. Hit practice mode.",
+      sur_over: "You lasted {n} rounds.",
+      sur_new_record: "New record! 🏆",
+      png_rounds: "hits · {r} rounds",
+      sur_rounds_word: "rounds",
       res_title: "Round complete",
       res_share: "Share text",
       res_share_img: "📸 Share image",
       res_practice: "Practice mode",
+      res_again: "Run again",
       res_next: "Next daily in",
       mini_streak: "Streak",
       mini_max: "Max",
@@ -147,6 +165,9 @@
       mini_reads: "Reads %",
       mini_mode: "Mode",
       mini_practice: "Practice",
+      mini_rounds: "Rounds",
+      mini_hits: "Hits",
+      mini_best: "Best",
       lesson_title: "📚 Lesson of the day",
       stats_title: "Statistics",
       st_normal: "Normal",
@@ -155,7 +176,39 @@
       st_streak: "streak",
       st_max: "max streak",
       st_reads: "Lifetime read accuracy: {pct}%",
+      acc_title: "Read accuracy per indicator",
+      acc_weak_tip: "Weakest read: {name} — recommended lesson:",
       dist_title: "Score distribution",
+      heat_title: "Last 12 weeks",
+      badges_title: "Badges",
+      sur_best_line: "Survival records — normal: {a} · HARD: {b} · ⚡: {c} · ⚡HARD: {d}",
+      btn_export: "⬇ Export progress",
+      btn_import: "⬆ Import",
+      exp_done: "Backup downloaded!",
+      imp_confirm: "Import will overwrite your current progress. Continue?",
+      imp_fail: "Invalid backup file",
+      new_badge: "🏆 New badge:",
+      b_first_win_n: "First win",
+      b_first_win_d: "Beat a daily market (4+/6)",
+      b_perfect_n: "Flawless",
+      b_perfect_d: "Score 6/6 in a daily",
+      b_streak7_n: "Week on fire",
+      b_streak7_d: "Reach a 7-day streak",
+      b_streak30_n: "Iron month",
+      b_streak30_d: "Reach a 30-day streak",
+      b_hard_n: "Hardcore",
+      b_hard_d: "Win a HARD daily",
+      b_reads90_n: "Market reader",
+      b_reads90_d: "90%+ read accuracy in a HARD daily",
+      b_survivor_n: "Marathoner",
+      b_survivor_d: "Score 20+ hits in Survival",
+      b_scholar_n: "Scholar",
+      b_scholar_d: "Finish practice on all 6 levels",
+      b_blitz_n: "Reflex",
+      b_blitz_d: "Win a ⚡BLITZ practice round (4+/6)",
+      eq_stake: "Stake 100 per round:",
+      eq_you: "You",
+      eq_hold: "Buy & hold",
       help_title: "How to play",
       footer_note:
         "Skill, not luck — but the market always gets the last word. Scores stay on your device. Not financial advice.",
@@ -163,6 +216,7 @@
       ann_correct: "Correct.",
       ann_wrong: "Wrong.",
       ann_practice: "Practice round started.",
+      ann_survival: "Survival run started.",
       share_copied: "Copied to clipboard!",
       share_failed: "Copy failed — select & copy",
       img_saved: "PNG saved — share it anywhere!",
@@ -180,13 +234,15 @@
           <li><strong>Stochastic(14,3,3).</strong> Above 80 / below 20 = extremes; %K crossing %D = fresh momentum.</li>
           <li><strong>Fibonacci.</strong> Retracements of the last big swing (0.382/0.5/0.618…) — classic reaction spots.</li>
         </ul>
-        <p><strong>HARD mode</strong> 🔥 — before every call you must tag each visible indicator yourself (▲ bullish / • neutral / ▼ bearish). The game grades your reads against the textbook reading. Separate daily streak.</p>
-        <p><strong>Practice mode</strong> is unlimited, has levels 1–6 and a fresh random chart every time (🔄). After <em>every</em> round you get a full breakdown of what the indicators were saying.</p>
+        <p><strong>HARD mode</strong> 🔥 — tag each visible indicator yourself (▲/•/▼) before every call. The game grades your reads. Separate daily streak.</p>
+        <p><strong>Survival</strong> 🏃 — endless rounds, 3 misses end the run. <strong>⚡BLITZ</strong> — a ticking clock on every decision (practice &amp; survival).</p>
+        <p><strong>Practice</strong> is unlimited, has levels 1–6 and a fresh random chart every time (🔄).</p>
         <p class="muted">Keyboard: <span class="kbd">↑</span>/<span class="kbd">B</span> = bull, <span class="kbd">↓</span>/<span class="kbd">S</span> = bear. Indicators give probabilities, not promises — that's the whole lesson. This is a game, not financial advice.</p>`,
     },
     pl: {
       tab_daily: "Dzienna",
       tab_practice: "Trening",
+      tab_survival: "Survival",
       lv_1: "Czysta cena",
       lv_2: "+ Średnie",
       lv_3: "+ Momentum",
@@ -202,6 +258,7 @@
       fb_correct: "Trafione — zamknięcie {word}.",
       fb_wrong: "Pudło — zamknięcie {word}.",
       fb_tag_first: "HARD: najpierw oznacz wszystkie wskaźniki.",
+      fb_timeout: "Czas minął — liczy się jak pudło!",
       w_green: "na zielono (byk)",
       w_red: "na czerwono (niedźwiedź)",
       w_greens: "zielonych",
@@ -209,6 +266,7 @@
       word_up: "wzrostów (BULL)",
       word_down: "spadków (BEAR)",
       practice_sub: "Trening — świeży wykres, nie wpływa na statystyki",
+      sur_sub: "Przetrwaj jak najdłużej — 3 pomyłki kończą bieg",
       reads_title: "HARD: oznacz swój odczyt każdego wskaźnika, aby odblokować typowanie",
       you_said: "Ty:",
       ind_name_ma: "Trend (MA)",
@@ -230,6 +288,7 @@
         "Twój wybór zgadzał się ze wskaźnikami — rynek po prostu złamał tym razem schemat. Tak działa giełda: myśl prawdopodobieństwami, nie pewnikami.",
       an_wrong_mixed:
         "Sygnały były naprawdę mieszane — to był niemal rzut monetą. Odpuszczanie niejasnych okazji to też umiejętność.",
+      an_timeout: "Czas się skończył — rynek nie czeka. Brak decyzji liczy się jak pudło.",
       an_lead: "Wypadkowa sygnałów: {txt}",
       lead_up: "przewaga byków ({s})",
       lead_down: "przewaga niedźwiedzi ({s})",
@@ -279,10 +338,15 @@
       headline_2: "Ciężka sesja.",
       headline_1: "Dziś wygrał rynek.",
       headline_0: "Brutalnie. Wskocz do treningu.",
+      sur_over: "Przetrwałeś {n} rund.",
+      sur_new_record: "Nowy rekord! 🏆",
+      png_rounds: "trafień · {r} rund",
+      sur_rounds_word: "rund",
       res_title: "Runda zakończona",
       res_share: "Udostępnij tekst",
       res_share_img: "📸 Udostępnij obrazek",
       res_practice: "Tryb treningowy",
+      res_again: "Jeszcze raz",
       res_next: "Nowa dzienna za",
       mini_streak: "Seria",
       mini_max: "Maks",
@@ -290,6 +354,9 @@
       mini_reads: "% odczytów",
       mini_mode: "Tryb",
       mini_practice: "Trening",
+      mini_rounds: "Rundy",
+      mini_hits: "Trafienia",
+      mini_best: "Rekord",
       lesson_title: "📚 Lekcja dnia",
       stats_title: "Statystyki",
       st_normal: "Normalny",
@@ -298,7 +365,39 @@
       st_streak: "seria",
       st_max: "maks. seria",
       st_reads: "Trafność odczytów (łącznie): {pct}%",
+      acc_title: "Celność odczytów per wskaźnik",
+      acc_weak_tip: "Najsłabszy odczyt: {name} — polecana lekcja:",
       dist_title: "Rozkład wyników",
+      heat_title: "Ostatnie 12 tygodni",
+      badges_title: "Odznaki",
+      sur_best_line: "Rekordy Survival — zwykły: {a} · HARD: {b} · ⚡: {c} · ⚡HARD: {d}",
+      btn_export: "⬇ Eksport postępów",
+      btn_import: "⬆ Import",
+      exp_done: "Kopia pobrana!",
+      imp_confirm: "Import nadpisze obecne postępy. Kontynuować?",
+      imp_fail: "Nieprawidłowy plik kopii",
+      new_badge: "🏆 Nowa odznaka:",
+      b_first_win_n: "Pierwsza wygrana",
+      b_first_win_d: "Pokonaj dzienny rynek (4+/6)",
+      b_perfect_n: "Bezbłędnie",
+      b_perfect_d: "Wynik 6/6 w dziennej",
+      b_streak7_n: "Tydzień z rynkiem",
+      b_streak7_d: "Osiągnij serię 7 dni",
+      b_streak30_n: "Żelazny miesiąc",
+      b_streak30_d: "Osiągnij serię 30 dni",
+      b_hard_n: "Twardziel",
+      b_hard_d: "Wygraj dzienną HARD",
+      b_reads90_n: "Czytasz rynek",
+      b_reads90_d: "90%+ odczytów w dziennej HARD",
+      b_survivor_n: "Maratończyk",
+      b_survivor_d: "Zdobądź 20+ trafień w Survival",
+      b_scholar_n: "Akademik",
+      b_scholar_d: "Ukończ trening na wszystkich 6 poziomach",
+      b_blitz_n: "Refleks",
+      b_blitz_d: "Wygraj trening ⚡BLITZ (4+/6)",
+      eq_stake: "Stawka 100 na rundę:",
+      eq_you: "Ty",
+      eq_hold: "Kup i trzymaj",
       help_title: "Jak grać",
       footer_note:
         "Umiejętności, nie szczęście — ale ostatnie słowo zawsze należy do rynku. Wyniki zostają na Twoim urządzeniu. To nie jest porada inwestycyjna.",
@@ -306,6 +405,7 @@
       ann_correct: "Trafione.",
       ann_wrong: "Pudło.",
       ann_practice: "Runda treningowa rozpoczęta.",
+      ann_survival: "Bieg Survival rozpoczęty.",
       share_copied: "Skopiowano do schowka!",
       share_failed: "Kopiowanie nie wyszło — zaznacz i skopiuj",
       img_saved: "PNG zapisany — udostępnij gdzie chcesz!",
@@ -323,8 +423,9 @@
           <li><strong>Stochastic(14,3,3).</strong> Powyżej 80 / poniżej 20 = ekstrema; przecięcie %K i %D = świeże momentum.</li>
           <li><strong>Fibonacci.</strong> Zniesienia ostatniej dużej fali (0.382/0.5/0.618…) — klasyczne miejsca reakcji.</li>
         </ul>
-        <p><strong>Tryb HARD</strong> 🔥 — przed każdym typem sam oznaczasz odczyt każdego widocznego wskaźnika (▲ byczy / • neutralny / ▼ niedźwiedzi). Gra ocenia Twoje odczyty względem podręcznikowych. Osobna dzienna seria.</p>
-        <p><strong>Trening</strong> jest nielimitowany, ma poziomy 1–6 i za każdym razem świeży, losowy wykres (🔄). Po <em>każdej</em> rundzie dostajesz pełne rozbicie sygnałów.</p>
+        <p><strong>Tryb HARD</strong> 🔥 — oznaczasz odczyt każdego wskaźnika (▲/•/▼) przed typem. Gra ocenia Twoje odczyty. Osobna dzienna seria.</p>
+        <p><strong>Survival</strong> 🏃 — rundy bez końca, 3 pomyłki kończą bieg. <strong>⚡BLITZ</strong> — tykający zegar przy każdej decyzji (trening i survival).</p>
+        <p><strong>Trening</strong> jest nielimitowany, ma poziomy 1–6 i świeży, losowy wykres za każdym razem (🔄).</p>
         <p class="muted">Klawiatura: <span class="kbd">↑</span>/<span class="kbd">B</span> = bull, <span class="kbd">↓</span>/<span class="kbd">S</span> = bear. Wskaźniki dają prawdopodobieństwa, nie obietnice — i to jest cała lekcja. To gra, nie porada inwestycyjna.</p>`,
     },
   };
@@ -385,6 +486,19 @@
     ],
   };
 
+  /* ---------------- Badges ---------------- */
+  const BADGES = [
+    { id: "first_win", icon: "✅" },
+    { id: "perfect", icon: "🎯" },
+    { id: "streak7", icon: "🔥" },
+    { id: "streak30", icon: "🌋" },
+    { id: "hard", icon: "🦾" },
+    { id: "reads90", icon: "🧠" },
+    { id: "survivor", icon: "🏃" },
+    { id: "scholar", icon: "🎓" },
+    { id: "blitz", icon: "⚡" },
+  ];
+
   /* ---------------- Tiny utilities ---------------- */
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -440,7 +554,8 @@
   }
 
   /* ---------------- Market model ---------------- */
-  function generateSeries(seedStr) {
+  function generateSeries(seedStr, total) {
+    const N = total || GEN_TOTAL;
     const rand = makeRng(seedStr);
     const candles = [];
     const base = 80 + rand() * 120;
@@ -451,7 +566,7 @@
     const reversion = 0.01 + rand() * 0.02;
 
     let prevRet = 0;
-    for (let i = 0; i < GEN_TOTAL; i++) {
+    for (let i = 0; i < N; i++) {
       const open = price;
       const pull = Math.log(base / price) * reversion;
       const noise = gaussian(rand) * vol;
@@ -558,7 +673,6 @@
     }
     return out;
   }
-  // Bollinger Bands (20, 2) — rolling stddev around SMA
   function bollingerArr(closes, n, mult) {
     const up = new Array(closes.length).fill(null);
     const lo = new Array(closes.length).fill(null);
@@ -580,7 +694,6 @@
     }
     return { up, lo };
   }
-  // Slow Stochastic (14, 3, 3)
   function stochArr(series, n, smooth, dN) {
     const raw = new Array(series.length).fill(null);
     for (let i = n - 1; i < series.length; i++) {
@@ -648,7 +761,7 @@
     return clusters.map((c) => ({ price: c.sum / c.n, touches: c.n }));
   }
 
-  /* ---------------- Fibonacci retracement of the dominant swing ---------------- */
+  /* ---------------- Fibonacci ---------------- */
   const FIB_RATIOS = [0.236, 0.382, 0.5, 0.618, 0.786];
   function computeFib(series, startAbs, endAbs, atr) {
     let hi = -Infinity,
@@ -666,7 +779,7 @@
       }
     }
     if (!isFinite(hi) || !isFinite(lo) || hi - lo < (atr || 0) * 3) return null;
-    const up = loI < hiI; // swing direction: low first = up-swing
+    const up = loI < hiI;
     return {
       up,
       hi,
@@ -681,6 +794,11 @@
   }
   function puzzleNumberFor(date) {
     return Math.floor((startOfDay(date) - CONFIG.EPOCH) / 86400000) + 1;
+  }
+  function dateForNumber(n) {
+    const d = new Date(CONFIG.EPOCH);
+    d.setDate(d.getDate() + (n - 1));
+    return d;
   }
   function formatDate(date) {
     try {
@@ -726,6 +844,8 @@
       dist: [0, 0, 0, 0, 0, 0, 0],
       readsCorrect: 0,
       readsTotal: 0,
+      readsByKey: {},
+      history: {},
     };
   }
   function normalizeStats(raw) {
@@ -741,6 +861,48 @@
     if (Array.isArray(raw.dist) && raw.dist.length === 7) d.dist = raw.dist.map((x) => clampInt(x, 0, 1e9));
     d.readsCorrect = clampInt(raw.readsCorrect, 0, 1e12);
     d.readsTotal = clampInt(raw.readsTotal, 0, 1e12);
+    if (raw.readsByKey && typeof raw.readsByKey === "object") {
+      for (const k of ALL_INDS) {
+        const e = raw.readsByKey[k];
+        if (e && typeof e === "object") {
+          d.readsByKey[k] = { c: clampInt(e.c, 0, 1e9), t: clampInt(e.t, 0, 1e9) };
+        }
+      }
+    }
+    if (raw.history && typeof raw.history === "object") {
+      for (const n in raw.history) {
+        const num = clampInt(n, 1, 1e6);
+        d.history[num] = clampInt(raw.history[n], 0, CONFIG.ROUNDS);
+      }
+    }
+    return d;
+  }
+
+  function defaultSurvival() {
+    return { best: { norm: 0, hard: 0, "norm-blitz": 0, "hard-blitz": 0 }, games: 0 };
+  }
+  function normalizeSurvival(raw) {
+    const d = defaultSurvival();
+    if (!raw || typeof raw !== "object") return d;
+    d.games = clampInt(raw.games, 0, 1e9);
+    if (raw.best && typeof raw.best === "object") {
+      for (const k in d.best) d.best[k] = clampInt(raw.best[k], 0, 1e6);
+    }
+    return d;
+  }
+
+  function defaultBadgeStore() {
+    return { earned: {}, levelsDone: [] };
+  }
+  function normalizeBadgeStore(raw) {
+    const d = defaultBadgeStore();
+    if (!raw || typeof raw !== "object") return d;
+    if (raw.earned && typeof raw.earned === "object") {
+      for (const b of BADGES) if (raw.earned[b.id]) d.earned[b.id] = clampInt(raw.earned[b.id], 0, 1e6);
+    }
+    if (Array.isArray(raw.levelsDone)) {
+      d.levelsDone = raw.levelsDone.map((x) => clampInt(x, 1, LEVELS.length)).filter((v, i, a) => a.indexOf(v) === i);
+    }
     return d;
   }
 
@@ -753,6 +915,7 @@
       lang: nav.startsWith("pl") ? "pl" : "en",
       practiceLevel: 1,
       hard: false,
+      blitz: false,
       indOn: { ma: true, vol: true, rsi: true, macd: true, sr: true, bb: true, stoch: true, fib: true },
     };
   }
@@ -765,6 +928,7 @@
     d.lang = raw.lang === "pl" ? "pl" : raw.lang === "en" ? "en" : d.lang;
     d.practiceLevel = clampInt(raw.practiceLevel, 1, LEVELS.length) || 1;
     d.hard = raw.hard === true;
+    d.blitz = raw.blitz === true;
     if (raw.indOn && typeof raw.indOn === "object") {
       for (const k of ALL_INDS) d.indOn[k] = raw.indOn[k] !== false;
     }
@@ -816,15 +980,20 @@
     normal: normalizeStats(Store.get(KEYS.stats, null)),
     hard: normalizeStats(Store.get(KEYS.statsHard, null)),
   };
+  let survival = normalizeSurvival(Store.get(KEYS.survival, null));
+  let badgeStore = normalizeBadgeStore(Store.get(KEYS.badges, null));
 
-  let game = null; // {mode, hard, number, series, ind, round, results, finished, readsCorrect, readsTotal}
+  let game = null;
   let lastAnalysis = null;
-  let hardReads = {}; // key -> 1|0|-1 for the CURRENT round
+  let hardReads = {};
   let practiceCounter = 0;
+  let survivalCounter = 0;
   let busy = false;
   let countdownTimer = null;
   let statsView = "normal";
   let previewURL = null;
+  let blitzTimer = { id: null, end: 0 };
+  let newBadgesQueue = [];
 
   function t(key, vars) {
     const pack = STR[prefs.lang] || STR.en;
@@ -838,6 +1007,9 @@
   function saveStats() {
     Store.set(KEYS.stats, stats.normal);
     Store.set(KEYS.statsHard, stats.hard);
+  }
+  function surFlavor() {
+    return (prefs.hard ? "hard" : "norm") + (prefs.blitz ? "-blitz" : "");
   }
 
   /* ---------------- DOM refs ---------------- */
@@ -864,10 +1036,15 @@
     live: $("#aria-live"),
     tabDaily: $("#tab-daily"),
     tabPractice: $("#tab-practice"),
+    tabSurvival: $("#tab-survival"),
     levelbar: $("#levelbar"),
     indbar: $("#indbar"),
     btnHard: $("#btn-hard"),
+    btnBlitz: $("#btn-blitz"),
     btnNewChart: $("#btn-newchart"),
+    timer: $("#blitz-timer"),
+    timerFill: $("#bt-fill"),
+    timerSecs: $("#bt-secs"),
     reads: $("#reads"),
     readsList: $("#reads-list"),
     analysis: $("#analysis"),
@@ -889,6 +1066,11 @@
     lessonName: $("#lesson-name"),
     lessonBody: $("#lesson-body"),
     sharePreview: $("#share-preview"),
+    equity: $("#equity"),
+    equityCap: $("#equity-cap"),
+    equitySvg: $("#equity-svg"),
+    newBadges: $("#new-badges"),
+    btnPracticeRes: $("#btn-practice"),
   };
 
   function announce(msg) {
@@ -898,7 +1080,7 @@
 
   /* ---------------- Indicator visibility ---------------- */
   function activeIndSet() {
-    if (!game || game.mode === "daily") return new Set(ALL_INDS);
+    if (!game || game.mode !== "practice") return new Set(ALL_INDS);
     return new Set(LEVELS[prefs.practiceLevel - 1].inds);
   }
   function displayedInds() {
@@ -909,12 +1091,34 @@
     return ALL_INDS.filter((k) => displayedInds().has(k));
   }
 
-  /* ---------------- Geometry ---------------- */
-  function revealedCount() {
-    return game.finished ? VISIBLE : Math.min(VISIBLE, CONFIG.HISTORY + game.round);
+  /* ---------------- Geometry / view window ---------------- */
+  function revealedTotal() {
+    return CONFIG.HISTORY + game.round;
   }
   function lastRevealedAbs() {
-    return VIS_START + revealedCount() - 1;
+    return VIS_START + revealedTotal() - 1;
+  }
+  // The chart always shows VISIBLE slots; in survival the window slides.
+  function viewWin() {
+    const revealed = revealedTotal();
+    if (game.mode === "survival") {
+      const nShow = Math.min(game.finished ? VISIBLE : VISIBLE - 1, revealed);
+      const winStart = VIS_START + revealed - nShow;
+      const divSlot = CONFIG.HISTORY - (revealed - nShow);
+      return {
+        winStart,
+        nShow,
+        divSlot: divSlot >= 0 && divSlot <= nShow ? divSlot : null,
+        placeholder: !game.finished,
+      };
+    }
+    const nShow = game.finished ? VISIBLE : Math.min(VISIBLE, revealed);
+    return {
+      winStart: VIS_START,
+      nShow,
+      divSlot: CONFIG.HISTORY,
+      placeholder: !game.finished && nShow < VISIBLE,
+    };
   }
   function chartGeom() {
     const cw = dom.chartWrap.clientWidth || 720;
@@ -940,8 +1144,8 @@
 
     const plotW = W - padL - padR;
     const slotW = plotW / VISIBLE;
-    const nVis = revealedCount();
-    const visible = game.series.slice(VIS_START, VIS_START + nVis);
+    const w = viewWin();
+    const visible = game.series.slice(w.winStart, w.winStart + w.nShow);
     const ind = game.ind;
     const iLast = lastRevealedAbs();
 
@@ -955,11 +1159,10 @@
       min = (min || 100) * 0.98;
       max = (max || 100) * 1.02;
     }
-    // include Bollinger extremes so bands don't clip
     if (shown.has("bb")) {
-      for (let v = 0; v < nVis; v++) {
-        const u = ind.bb.up[VIS_START + v],
-          l = ind.bb.lo[VIS_START + v];
+      for (let v = 0; v < w.nShow; v++) {
+        const u = ind.bb.up[w.winStart + v],
+          l = ind.bb.lo[w.winStart + v];
         if (u != null && u > max) max = u;
         if (l != null && l < min) min = l;
       }
@@ -980,18 +1183,19 @@
       lb.textContent = p.toFixed(p < 100 ? 1 : 0);
     }
 
-    const divX = padL + slotW * CONFIG.HISTORY;
-    svg("line", { class: "divider", x1: divX, y1: padT, x2: divX, y2: padT + priceH }, c);
-    const dl = svg("text", { class: "divider-label", x: divX + 4, y: padT + 11 }, c);
-    dl.textContent = "LIVE";
+    if (w.divSlot != null) {
+      const divX = padL + slotW * w.divSlot;
+      svg("line", { class: "divider", x1: divX, y1: padT, x2: divX, y2: padT + priceH }, c);
+      const dl = svg("text", { class: "divider-label", x: divX + 4, y: padT + 11 }, c);
+      dl.textContent = "LIVE";
+    }
 
-    // Bollinger bands (under candles)
     if (shown.has("bb")) {
       const upPts = [],
         loPts = [];
-      for (let v = 0; v < nVis; v++) {
-        const u = ind.bb.up[VIS_START + v],
-          l = ind.bb.lo[VIS_START + v];
+      for (let v = 0; v < w.nShow; v++) {
+        const u = ind.bb.up[w.winStart + v],
+          l = ind.bb.lo[w.winStart + v];
         if (u != null) upPts.push([xC(v), yOf(u)]);
         if (l != null) loPts.push([xC(v), yOf(l)]);
       }
@@ -1012,9 +1216,8 @@
       }
     }
 
-    // Fibonacci retracement
     if (shown.has("fib")) {
-      const fib = computeFib(game.series, VIS_START, iLast, ind.atr14[iLast]);
+      const fib = computeFib(game.series, w.winStart, iLast, ind.atr14[iLast]);
       if (fib) {
         for (const L of fib.levels) {
           if (L.price < min || L.price > max) continue;
@@ -1026,11 +1229,10 @@
       }
     }
 
-    // support / resistance
     if (shown.has("sr")) {
       const atr = ind.atr14[iLast] || game.series[iLast].close * 0.02;
       const close = game.series[iLast].close;
-      const levels = findLevels(game.series, VIS_START, iLast, atr * 0.8);
+      const levels = findLevels(game.series, w.winStart, iLast, atr * 0.8);
       const res = levels.filter((L) => L.price > close).sort((a, b) => a.price - b.price).slice(0, 2);
       const sup = levels.filter((L) => L.price <= close).sort((a, b) => b.price - a.price).slice(0, 2);
       for (const group of [res, sup]) {
@@ -1045,7 +1247,6 @@
       }
     }
 
-    // volume block
     if (showVol) {
       const volTop = padT + priceH + gap;
       let vMax = 1;
@@ -1063,7 +1264,7 @@
       });
       const pts = [];
       visible.forEach((k, v) => {
-        const a = ind.volAvg10[VIS_START + v];
+        const a = ind.volAvg10[w.winStart + v];
         if (a != null) pts.push(`${xC(v).toFixed(1)},${(volTop + volH - (a / vMax) * volH).toFixed(1)}`);
       });
       if (pts.length > 1) svg("polyline", { class: "vol-avg", points: pts.join(" ") }, c);
@@ -1071,12 +1272,11 @@
       vl.textContent = "VOL";
     }
 
-    // moving averages
     if (shown.has("ma")) {
       const mk = (arr, cls) => {
         const pts = [];
-        for (let v = 0; v < nVis; v++) {
-          const val = arr[VIS_START + v];
+        for (let v = 0; v < w.nShow; v++) {
+          const val = arr[w.winStart + v];
           if (val != null) pts.push(`${xC(v).toFixed(1)},${yOf(val).toFixed(1)}`);
         }
         if (pts.length > 1) svg("polyline", { class: "ma-line " + cls, points: pts.join(" ") }, c);
@@ -1089,10 +1289,9 @@
       l2.textContent = "EMA9";
     }
 
-    // candles
     const bodyW = Math.max(3, slotW * 0.58);
     visible.forEach((k, v) => {
-      const isNew = !game.finished && v === nVis - 1 && game.round > 0;
+      const isNew = !game.finished && v === w.nShow - 1 && game.round > 0;
       const g = svg("g", { class: "candle " + (k.bull ? "bull" : "bear") + (isNew ? " candle--new" : "") }, c);
       const x = xC(v);
       svg("line", { class: "wick", x1: x, y1: yOf(k.high), x2: x, y2: yOf(k.low) }, g);
@@ -1101,8 +1300,8 @@
       svg("rect", { class: "body", x: x - bodyW / 2, y: yT, width: bodyW, height: Math.max(1.5, yB - yT), rx: 1.2 }, g);
     });
 
-    if (!game.finished && nVis < VISIBLE) {
-      const px = xC(nVis);
+    if (w.placeholder) {
+      const px = xC(w.nShow);
       svg("rect", { class: "placeholder-band", x: px - slotW / 2, y: padT, width: slotW, height: priceH }, c);
       const q = svg("text", { class: "placeholder-q", x: px, y: padT + priceH / 2 }, c);
       q.textContent = "?";
@@ -1110,11 +1309,11 @@
 
     const last = visible[visible.length - 1];
     if (game.finished) {
-      c.setAttribute("aria-label", `Final chart, ${VISIBLE} candles. Score ${score()} of ${CONFIG.ROUNDS}.`);
+      c.setAttribute("aria-label", `Final chart. Score ${score()}.`);
     } else {
       c.setAttribute(
         "aria-label",
-        `Round ${game.round + 1} of ${CONFIG.ROUNDS}. ${nVis} candles. Last closed ${last.bull ? "green" : "red"}. Call the next candle.`
+        `Round ${game.round + 1}. Last candle closed ${last.bull ? "green" : "red"}. Call the next candle.`
       );
     }
   }
@@ -1141,10 +1340,10 @@
         const lb = svg("text", { class: "axislabel", x: padL - 5, y: yOf(lvl) + 3, "text-anchor": "end" }, c);
         lb.textContent = lvl;
       }
-      const nVis = revealedCount();
+      const w = viewWin();
       const pts = [];
-      for (let v = 0; v < nVis; v++) {
-        const val = game.ind.rsi14[VIS_START + v];
+      for (let v = 0; v < w.nShow; v++) {
+        const val = game.ind.rsi14[w.winStart + v];
         if (val != null) pts.push(`${xC(v).toFixed(1)},${yOf(val).toFixed(1)}`);
       }
       if (pts.length > 1) svg("polyline", { class: "rsi-line", points: pts.join(" ") }, c);
@@ -1160,11 +1359,11 @@
         const lb = svg("text", { class: "axislabel", x: padL - 5, y: yOf(lvl) + 3, "text-anchor": "end" }, c);
         lb.textContent = lvl;
       }
-      const nVis = revealedCount();
+      const w = viewWin();
       const mk = (arr, cls) => {
         const pts = [];
-        for (let v = 0; v < nVis; v++) {
-          const val = arr[VIS_START + v];
+        for (let v = 0; v < w.nShow; v++) {
+          const val = arr[w.winStart + v];
           if (val != null) pts.push(`${xC(v).toFixed(1)},${yOf(val).toFixed(1)}`);
         }
         if (pts.length > 1) svg("polyline", { class: cls, points: pts.join(" ") }, c);
@@ -1176,11 +1375,11 @@
 
   function renderMacd() {
     renderOscPanel(dom.macdPanel, ({ c, W, padL, padR, padT, h, slotW, xC }) => {
-      const nVis = revealedCount();
+      const w = viewWin();
       const { line, signal, hist } = game.ind.macd;
       let m = 0;
-      for (let v = 0; v < nVis; v++) {
-        const i = VIS_START + v;
+      for (let v = 0; v < w.nShow; v++) {
+        const i = w.winStart + v;
         for (const arr of [line, signal, hist]) {
           if (arr[i] != null && Math.abs(arr[i]) > m) m = Math.abs(arr[i]);
         }
@@ -1190,8 +1389,8 @@
       const yOf = (val) => mid - (val / m) * (h / 2 - 4);
       svg("line", { class: "zero-line", x1: padL, y1: mid, x2: W - padR, y2: mid }, c);
       const bw = Math.max(2, slotW * 0.5);
-      for (let v = 0; v < nVis; v++) {
-        const hv = hist[VIS_START + v];
+      for (let v = 0; v < w.nShow; v++) {
+        const hv = hist[w.winStart + v];
         if (hv == null) continue;
         const y = yOf(hv);
         svg("rect", {
@@ -1204,8 +1403,8 @@
       }
       const mk = (arr, cls) => {
         const pts = [];
-        for (let v = 0; v < nVis; v++) {
-          const val = arr[VIS_START + v];
+        for (let v = 0; v < w.nShow; v++) {
+          const val = arr[w.winStart + v];
           if (val != null) pts.push(`${xC(v).toFixed(1)},${yOf(val).toFixed(1)}`);
         }
         if (pts.length > 1) svg("polyline", { class: cls, points: pts.join(" ") }, c);
@@ -1251,13 +1450,14 @@
     updateReadouts();
   }
 
-  /* ---------------- Signals (teaching engine) ---------------- */
+  /* ---------------- Signals ---------------- */
   function computeSignals() {
     const i = lastRevealedAbs();
     const s = game.series;
     const ind = game.ind;
     const close = s[i].close;
     const shown = displayedInds();
+    const w = viewWin();
     const out = [];
 
     if (shown.has("ma")) {
@@ -1297,7 +1497,7 @@
 
     if (shown.has("sr")) {
       const atr = ind.atr14[i] || close * 0.02;
-      const levels = findLevels(s, VIS_START, i, atr * 0.8);
+      const levels = findLevels(s, w.winStart, i, atr * 0.8);
       let res = null,
         sup = null;
       for (const L of levels) {
@@ -1336,13 +1536,12 @@
         lo = ind.bb.lo[i],
         mid = ind.sma20[i];
       if (up != null && lo != null && mid) {
-        // squeeze = current band width well below the recent average width
         let wSum = 0,
           wN = 0;
-        for (let v = 0; v < revealedCount(); v++) {
-          const u2 = ind.bb.up[VIS_START + v],
-            l2 = ind.bb.lo[VIS_START + v],
-            m2 = ind.sma20[VIS_START + v];
+        for (let v = 0; v < w.nShow; v++) {
+          const u2 = ind.bb.up[w.winStart + v],
+            l2 = ind.bb.lo[w.winStart + v],
+            m2 = ind.sma20[w.winStart + v];
           if (u2 != null && l2 != null && m2) {
             wSum += (u2 - l2) / m2;
             wN++;
@@ -1376,7 +1575,7 @@
 
     if (shown.has("fib")) {
       const atr = ind.atr14[i] || close * 0.02;
-      const fib = computeFib(s, VIS_START, i, atr);
+      const fib = computeFib(s, w.winStart, i, atr);
       let pushed = false;
       if (fib) {
         let best = null;
@@ -1398,7 +1597,6 @@
       if (!pushed) out.push({ key: "fib", tKey: "sig_fib_none", dir: 0, w: 0 });
     }
 
-    // price-action streak — always on
     let n = 1;
     while (n < 6 && s[i - n] && s[i - n].bull === s[i].bull) n++;
     if (n >= 3)
@@ -1417,7 +1615,7 @@
     return signals.reduce((acc, s) => acc + s.dir * s.w, 0);
   }
 
-  /* ---------------- HARD reads panel ---------------- */
+  /* ---------------- HARD reads ---------------- */
   function readsComplete() {
     const keys = readKeys();
     return keys.every((k) => hardReads[k] === 1 || hardReads[k] === 0 || hardReads[k] === -1);
@@ -1471,19 +1669,62 @@
     dom.bear.disabled = busy || !gateOpen;
   }
 
+  /* ---------------- Blitz timer ---------------- */
+  function blitzSeconds() {
+    return prefs.hard ? CONFIG.BLITZ_S_HARD : CONFIG.BLITZ_S;
+  }
+  function blitzActive() {
+    return prefs.blitz && game && game.mode !== "daily" && !game.finished;
+  }
+  function stopTimer() {
+    if (blitzTimer.id) {
+      window.clearInterval(blitzTimer.id);
+      blitzTimer.id = null;
+    }
+  }
+  function scheduleTimer() {
+    stopTimer();
+    if (!blitzActive()) {
+      dom.timer.hidden = true;
+      return;
+    }
+    dom.timer.hidden = false;
+    const total = blitzSeconds() * 1000;
+    blitzTimer.end = performance.now() + total;
+    const tick = () => {
+      const left = blitzTimer.end - performance.now();
+      if (left <= 0) {
+        stopTimer();
+        dom.timerFill.style.width = "0%";
+        dom.timerSecs.textContent = "0";
+        timeoutRound();
+        return;
+      }
+      const pct = (left / total) * 100;
+      dom.timerFill.style.width = pct.toFixed(1) + "%";
+      dom.timerFill.classList.toggle("low", pct < 30);
+      dom.timerSecs.textContent = String(Math.ceil(left / 1000));
+    };
+    tick();
+    blitzTimer.id = window.setInterval(tick, 100);
+  }
+
   /* ---------------- Analysis card ---------------- */
   function renderAnalysis() {
     if (!lastAnalysis) {
       dom.analysis.hidden = true;
       return;
     }
-    const { round, signals, consensus, userDir, actualDir, reads } = lastAnalysis;
+    const { round, signals, consensus, userDir, actualDir, reads, timeout } = lastAnalysis;
     dom.analysis.hidden = false;
     dom.anTitle.textContent = t("analysis_title", { n: round });
 
     const cDir = Math.sign(consensus);
     let hKey, hClass;
-    if (userDir === actualDir) {
+    if (timeout) {
+      hKey = "an_timeout";
+      hClass = "bad";
+    } else if (userDir === actualDir) {
       hKey = cDir === 0 ? "an_correct_mixed" : cDir !== userDir ? "an_correct_against" : "an_correct_with";
       hClass = "good";
     } else if (cDir === 0) {
@@ -1521,7 +1762,6 @@
       txt.className = "an-text";
       txt.textContent = t(sig.tKey, vars);
 
-      // HARD: show what the player tagged for this indicator
       if (reads && Object.prototype.hasOwnProperty.call(reads, sig.key)) {
         const you = document.createElement("span");
         you.className = "an-you";
@@ -1558,6 +1798,16 @@
   function renderProgress() {
     const ol = dom.progress;
     while (ol.firstChild) ol.removeChild(ol.firstChild);
+    if (game.mode === "survival") {
+      const li = document.createElement("li");
+      li.className = "sur-lives";
+      li.innerHTML =
+        "❤️".repeat(game.lives) +
+        "🖤".repeat(CONFIG.SUR_LIVES - game.lives) +
+        `<span class="sur-round">R${game.round}</span>`;
+      ol.appendChild(li);
+      return;
+    }
     for (let i = 0; i < CONFIG.ROUNDS; i++) {
       const li = document.createElement("li");
       if (i < game.results.length) li.classList.add(game.results[i] ? "is-correct" : "is-wrong");
@@ -1569,7 +1819,11 @@
     return game.results.filter(Boolean).length;
   }
   function renderScore() {
-    dom.score.innerHTML = `${t("score_label")} <strong>${score()}</strong> / ${CONFIG.ROUNDS}`;
+    if (game.mode === "survival") {
+      dom.score.innerHTML = `${t("score_label")} <strong>${score()}</strong> / ${game.round}`;
+    } else {
+      dom.score.innerHTML = `${t("score_label")} <strong>${score()}</strong> / ${CONFIG.ROUNDS}`;
+    }
   }
   function setControls(enabled) {
     if (!enabled) {
@@ -1582,12 +1836,15 @@
 
   /* ---------------- Mode bars ---------------- */
   function renderModeBars() {
-    const isPractice = game && game.mode === "practice";
-    dom.tabDaily.setAttribute("aria-selected", String(!isPractice));
-    dom.tabPractice.setAttribute("aria-selected", String(isPractice));
-    dom.levelbar.hidden = !isPractice;
-    dom.btnNewChart.hidden = !isPractice;
+    const mode = game ? game.mode : "daily";
+    dom.tabDaily.setAttribute("aria-selected", String(mode === "daily"));
+    dom.tabPractice.setAttribute("aria-selected", String(mode === "practice"));
+    dom.tabSurvival.setAttribute("aria-selected", String(mode === "survival"));
+    dom.levelbar.hidden = mode !== "practice";
+    dom.btnNewChart.hidden = mode === "daily";
+    dom.btnBlitz.hidden = mode === "daily";
     dom.btnHard.setAttribute("aria-pressed", String(prefs.hard));
+    dom.btnBlitz.setAttribute("aria-pressed", String(prefs.blitz));
     $$("#levelbar button").forEach((b) => {
       b.classList.toggle("is-active", Number(b.dataset.level) === prefs.practiceLevel);
     });
@@ -1601,21 +1858,31 @@
   }
 
   function updateMetaTitle() {
-    const base = t(game.mode === "daily" ? "tab_daily" : "tab_practice");
-    dom.modeWord.innerHTML = prefs.hard ? `${base} <span class="hard-badge">HARD</span>` : base;
+    const base = t(
+      game.mode === "daily" ? "tab_daily" : game.mode === "survival" ? "tab_survival" : "tab_practice"
+    );
+    const marks =
+      (prefs.hard ? ' <span class="hard-badge">HARD</span>' : "") +
+      (prefs.blitz && game.mode !== "daily" ? ' <span class="hard-badge" style="color:var(--accent)">⚡</span>' : "");
+    dom.modeWord.innerHTML = base + marks;
     dom.number.textContent = "#" + game.number;
-    dom.date.textContent = game.mode === "daily" ? formatDate(new Date()) : t("practice_sub");
+    if (game.mode === "daily") dom.date.textContent = formatDate(new Date());
+    else if (game.mode === "survival")
+      dom.date.textContent = t("sur_sub") + ` · ${t("mini_best")}: ${survival.best[surFlavor()] || 0}`;
+    else dom.date.textContent = t("practice_sub");
   }
 
   /* ---------------- Core loop ---------------- */
   function startDaily() {
+    stopTimer();
     const today = new Date();
     const number = puzzleNumberFor(today);
     const saved = Store.get(KEYS.daily(number, prefs.hard), null);
-    const series = generateSeries("candle-daily-" + number);
+    const series = generateSeries("candle-daily-" + number, GEN_TOTAL);
     game = {
       mode: "daily",
       hard: prefs.hard,
+      blitz: false,
       number,
       series,
       ind: computeIndicators(series),
@@ -1624,6 +1891,8 @@
       finished: saved ? !!saved.finished : false,
       readsCorrect: saved ? clampInt(saved.readsCorrect, 0, 999) : 0,
       readsTotal: saved ? clampInt(saved.readsTotal, 0, 999) : 0,
+      readsByKey: saved && saved.readsByKey && typeof saved.readsByKey === "object" ? saved.readsByKey : {},
+      lives: 0,
     };
     lastAnalysis = null;
     hardReads = {};
@@ -1636,12 +1905,14 @@
   }
 
   function startPractice() {
+    stopTimer();
     practiceCounter += 1;
     const seedStr = "candle-practice-" + practiceCounter + "-" + Math.floor(performance.now());
-    const series = generateSeries(seedStr);
+    const series = generateSeries(seedStr, GEN_TOTAL);
     game = {
       mode: "practice",
       hard: prefs.hard,
+      blitz: prefs.blitz,
       number: practiceCounter,
       series,
       ind: computeIndicators(series),
@@ -1650,6 +1921,8 @@
       finished: false,
       readsCorrect: 0,
       readsTotal: 0,
+      readsByKey: {},
+      lives: 0,
     };
     lastAnalysis = null;
     hardReads = {};
@@ -1657,6 +1930,34 @@
     refreshAll();
     closeAllModals();
     announce(t("ann_practice"));
+  }
+
+  function startSurvival() {
+    stopTimer();
+    survivalCounter += 1;
+    const seedStr = "candle-survival-" + survivalCounter + "-" + Math.floor(performance.now());
+    const series = generateSeries(seedStr, SUR_TOTAL);
+    game = {
+      mode: "survival",
+      hard: prefs.hard,
+      blitz: prefs.blitz,
+      number: survivalCounter,
+      series,
+      ind: computeIndicators(series),
+      round: 0,
+      results: [],
+      finished: false,
+      readsCorrect: 0,
+      readsTotal: 0,
+      readsByKey: {},
+      lives: CONFIG.SUR_LIVES,
+    };
+    lastAnalysis = null;
+    hardReads = {};
+    updateMetaTitle();
+    refreshAll();
+    closeAllModals();
+    announce(t("ann_survival"));
   }
 
   function refreshAll() {
@@ -1667,49 +1968,54 @@
     renderAnalysis();
     renderReads();
     setControls(!game.finished);
+    scheduleTimer();
     dom.feedback.textContent = "";
     dom.feedback.className = "feedback";
   }
 
-  function call(predictBull) {
-    if (busy || !game || game.finished) return;
-    if (game.round >= CONFIG.ROUNDS) return;
-    if (prefs.hard && readKeys().length > 0 && !readsComplete()) {
-      dom.feedback.textContent = t("fb_tag_first");
-      dom.feedback.className = "feedback bad";
-      return;
-    }
+  function roundsLeft() {
+    if (game.mode === "survival") return game.lives > 0 && game.round < CONFIG.SUR_MAX;
+    return game.round < CONFIG.ROUNDS;
+  }
 
+  function resolveRound(predictBull, isTimeout) {
     busy = true;
+    stopTimer();
     setControls(false);
 
     const signals = computeSignals();
     const consensus = consensusOf(signals);
 
-    // HARD: grade the player's reads against the engine's
     let readsSnapshot = null;
-    if (prefs.hard && readKeys().length > 0) {
+    if (!isTimeout && prefs.hard && readKeys().length > 0) {
       readsSnapshot = Object.assign({}, hardReads);
       for (const sig of signals) {
         if (Object.prototype.hasOwnProperty.call(readsSnapshot, sig.key)) {
           game.readsTotal += 1;
-          if (readsSnapshot[sig.key] === sig.dir) game.readsCorrect += 1;
+          if (!game.readsByKey[sig.key]) game.readsByKey[sig.key] = { c: 0, t: 0 };
+          game.readsByKey[sig.key].t += 1;
+          if (readsSnapshot[sig.key] === sig.dir) {
+            game.readsCorrect += 1;
+            game.readsByKey[sig.key].c += 1;
+          }
         }
       }
     }
 
     const target = game.series[VIS_START + CONFIG.HISTORY + game.round];
-    const correct = target.bull === predictBull;
+    const correct = isTimeout ? false : target.bull === predictBull;
     game.results.push(correct);
     game.round += 1;
+    if (game.mode === "survival" && !correct) game.lives -= 1;
 
     lastAnalysis = {
       round: game.round,
       signals,
       consensus,
-      userDir: predictBull ? 1 : -1,
+      userDir: isTimeout ? 0 : predictBull ? 1 : -1,
       actualDir: target.bull ? 1 : -1,
       reads: readsSnapshot,
+      timeout: !!isTimeout,
     };
 
     hardReads = {};
@@ -1722,19 +2028,43 @@
     if (game.mode === "daily") saveDaily();
 
     Sound.play(correct ? "good" : "bad");
-    flashFeedback(correct, target.bull);
+    if (isTimeout) {
+      dom.feedback.textContent = t("fb_timeout");
+      dom.feedback.className = "feedback bad";
+      announce(t("fb_timeout"));
+    } else {
+      flashFeedback(correct, target.bull);
+    }
 
     window.setTimeout(() => {
       busy = false;
-      if (game.round >= CONFIG.ROUNDS) {
+      if (!roundsLeft()) {
         finishGame();
       } else {
         setControls(true);
         renderCharts();
         renderProgress();
         renderReads();
+        scheduleTimer();
       }
     }, 620);
+  }
+
+  function call(predictBull) {
+    if (busy || !game || game.finished) return;
+    if (!roundsLeft()) return;
+    if (prefs.hard && readKeys().length > 0 && !readsComplete()) {
+      dom.feedback.textContent = t("fb_tag_first");
+      dom.feedback.className = "feedback bad";
+      return;
+    }
+    resolveRound(predictBull, false);
+  }
+
+  function timeoutRound() {
+    if (busy || !game || game.finished) return;
+    if (!roundsLeft()) return;
+    resolveRound(false, true);
   }
 
   function flashFeedback(correct, wasBull) {
@@ -1749,19 +2079,30 @@
 
   function finishGame() {
     game.finished = true;
+    stopTimer();
+    dom.timer.hidden = true;
     setControls(false);
     renderCharts();
     renderProgress();
     renderReads();
 
+    let surNewRecord = false;
     if (game.mode === "daily") {
       recordDailyResult();
       saveDaily();
+    } else if (game.mode === "survival") {
+      surNewRecord = recordSurvival();
     }
-    const won = score() >= CONFIG.PASS;
+    if (game.mode === "practice" && !badgeStore.levelsDone.includes(prefs.practiceLevel)) {
+      badgeStore.levelsDone.push(prefs.practiceLevel);
+      Store.set(KEYS.badges, badgeStore);
+    }
+    evaluateBadges();
+
+    const won = game.mode === "survival" ? score() >= 10 : score() >= CONFIG.PASS;
     window.setTimeout(() => {
       Sound.play(won ? "win" : "bad");
-      openResult(true);
+      openResult(true, surNewRecord);
     }, 450);
   }
 
@@ -1779,6 +2120,12 @@
     if (pass) st.passes += 1;
     st.readsCorrect += game.readsCorrect;
     st.readsTotal += game.readsTotal;
+    for (const k in game.readsByKey) {
+      if (!st.readsByKey[k]) st.readsByKey[k] = { c: 0, t: 0 };
+      st.readsByKey[k].c += game.readsByKey[k].c;
+      st.readsByKey[k].t += game.readsByKey[k].t;
+    }
+    st.history[game.number] = s;
 
     if (pass) {
       if (st.lastNumber === game.number - 1) st.currentStreak += 1;
@@ -1791,6 +2138,19 @@
     saveStats();
   }
 
+  function recordSurvival() {
+    survival.games += 1;
+    const f = surFlavor();
+    const s = score();
+    let isNew = false;
+    if (s > (survival.best[f] || 0)) {
+      survival.best[f] = s;
+      isNew = true;
+    }
+    Store.set(KEYS.survival, survival);
+    return isNew;
+  }
+
   function saveDaily() {
     Store.set(KEYS.daily(game.number, game.hard), {
       round: game.round,
@@ -1798,7 +2158,135 @@
       finished: game.finished,
       readsCorrect: game.readsCorrect,
       readsTotal: game.readsTotal,
+      readsByKey: game.readsByKey,
     });
+  }
+
+  // one-time backfill of stats history from per-day saves
+  function backfillHistory() {
+    try {
+      const re = /^candle\.daily(\.hard)?\.v2\.(\d+)$/;
+      let dirty = false;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        const m = key && key.match(re);
+        if (!m) continue;
+        const data = Store.get(key, null);
+        if (!data || !data.finished || !Array.isArray(data.results)) continue;
+        const n = clampInt(m[2], 1, 1e6);
+        const st = m[1] ? stats.hard : stats.normal;
+        if (st.history[n] == null) {
+          st.history[n] = data.results.filter(Boolean).length;
+          dirty = true;
+        }
+      }
+      if (dirty) saveStats();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /* ---------------- Badges ---------------- */
+  function badgeEarned(id) {
+    return !!badgeStore.earned[id];
+  }
+  function earnBadge(id) {
+    if (badgeEarned(id)) return;
+    badgeStore.earned[id] = puzzleNumberFor(new Date());
+    Store.set(KEYS.badges, badgeStore);
+    newBadgesQueue.push(id);
+  }
+  function evaluateBadges() {
+    const anyBest = Math.max(...Object.values(survival.best));
+    const both = [stats.normal, stats.hard];
+    if (both.some((s) => s.passes >= 1)) earnBadge("first_win");
+    if (both.some((s) => (s.dist[6] || 0) >= 1)) earnBadge("perfect");
+    if (both.some((s) => s.maxStreak >= 7)) earnBadge("streak7");
+    if (both.some((s) => s.maxStreak >= 30)) earnBadge("streak30");
+    if (stats.hard.passes >= 1) earnBadge("hard");
+    if (anyBest >= 20) earnBadge("survivor");
+    if ([1, 2, 3, 4, 5, 6].every((l) => badgeStore.levelsDone.includes(l))) earnBadge("scholar");
+    if (
+      game &&
+      game.mode === "daily" &&
+      game.hard &&
+      game.finished &&
+      game.readsTotal >= 24 &&
+      game.readsCorrect / game.readsTotal >= 0.9
+    )
+      earnBadge("reads90");
+    if (game && game.mode === "practice" && game.blitz && game.finished && score() >= CONFIG.PASS) earnBadge("blitz");
+  }
+  function renderBadges() {
+    const wrap = $("#badges");
+    wrap.innerHTML = "";
+    for (const b of BADGES) {
+      const el = document.createElement("div");
+      el.className = "badge " + (badgeEarned(b.id) ? "earned" : "locked");
+      el.title = t("b_" + b.id + "_d");
+      const ic = document.createElement("span");
+      ic.className = "b-icon";
+      ic.textContent = b.icon;
+      el.appendChild(ic);
+      el.appendChild(document.createTextNode(t("b_" + b.id + "_n")));
+      wrap.appendChild(el);
+    }
+  }
+
+  /* ---------------- Equity curve ---------------- */
+  function renderEquity() {
+    if (!game.finished || game.round === 0) {
+      dom.equity.hidden = true;
+      return;
+    }
+    const you = [0],
+      hold = [0];
+    for (let i = 0; i < game.round; i++) {
+      const k = game.series[VIS_START + CONFIG.HISTORY + i];
+      const ret = (k.close - k.open) / k.open;
+      you.push(you[i] + (game.results[i] ? 1 : -1) * 100 * Math.abs(ret));
+      hold.push(hold[i] + 100 * ret);
+    }
+    const pFin = Math.round(you[you.length - 1]);
+    const hFin = Math.round(hold[hold.length - 1]);
+
+    dom.equityCap.innerHTML = "";
+    dom.equityCap.appendChild(document.createTextNode(t("eq_stake") + " "));
+    const sp1 = document.createElement("strong");
+    sp1.className = "eq-you";
+    sp1.textContent = `${t("eq_you")} ${pFin >= 0 ? "+" : ""}${pFin}`;
+    dom.equityCap.appendChild(sp1);
+    dom.equityCap.appendChild(document.createTextNode(" · "));
+    const sp2 = document.createElement("strong");
+    sp2.className = "eq-hold";
+    sp2.textContent = `${t("eq_hold")} ${hFin >= 0 ? "+" : ""}${hFin}`;
+    dom.equityCap.appendChild(sp2);
+
+    const c = dom.equitySvg;
+    while (c.firstChild) c.removeChild(c.firstChild);
+    const W = 360,
+      H = 96,
+      padL = 8,
+      padR = 8,
+      padT = 10,
+      padB = 10;
+    c.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    let mn = 0,
+      mx = 0;
+    for (const arr of [you, hold])
+      for (const v of arr) {
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+      }
+    if (mx === mn) mx = mn + 1;
+    const xOf = (i) => padL + (i / (you.length - 1)) * (W - padL - padR);
+    const yOf = (v) => padT + (1 - (v - mn) / (mx - mn)) * (H - padT - padB);
+    svg("line", { class: "eq-zero", x1: padL, y1: yOf(0), x2: W - padR, y2: yOf(0) }, c);
+    const mk = (arr, cls) =>
+      svg("polyline", { class: cls, points: arr.map((v, i) => `${xOf(i).toFixed(1)},${yOf(v).toFixed(1)}`).join(" ") }, c);
+    mk(hold, "eq-line-hold");
+    mk(you, "eq-line-you");
+    dom.equity.hidden = false;
   }
 
   /* ---------------- Result modal ---------------- */
@@ -1806,23 +2294,42 @@
     return total ? Math.round((correct / total) * 100) : 0;
   }
 
-  function openResult(announceIt) {
+  function openResult(announceIt, surNewRecord) {
     const s = score();
-    dom.resultTitle.innerHTML = game.hard ? `${t("res_title")} <span class="hard-badge">HARD</span>` : t("res_title");
-    dom.resultHeadline.textContent = t("headline_" + s);
-    dom.resultScore.textContent = `${s} / ${CONFIG.ROUNDS}`;
-    dom.resultGrid.textContent = game.results.map((r) => (r ? "🟩" : "🟥")).join("");
+    const marks =
+      (game.hard ? ' <span class="hard-badge">HARD</span>' : "") +
+      (game.blitz ? ' <span class="hard-badge" style="color:var(--accent)">⚡</span>' : "");
+    dom.resultTitle.innerHTML = t("res_title") + marks;
+
+    if (game.mode === "survival") {
+      dom.resultHeadline.textContent =
+        t("sur_over", { n: game.round }) + (surNewRecord ? " " + t("sur_new_record") : "");
+      dom.resultScore.textContent = String(s);
+      dom.resultGrid.textContent = `🟩×${s}  🟥×${CONFIG.SUR_LIVES - game.lives}`;
+    } else {
+      dom.resultHeadline.textContent = t("headline_" + s);
+      dom.resultScore.textContent = `${s} / ${CONFIG.ROUNDS}`;
+      dom.resultGrid.textContent = game.results.map((r) => (r ? "🟩" : "🟥")).join("");
+    }
 
     dom.resultMini.innerHTML = "";
     const st = bucketStats();
-    const minis =
-      game.mode === "daily"
-        ? [
-            [t("mini_streak"), st.currentStreak],
-            [t("mini_max"), st.maxStreak],
-            [t("mini_win"), winRate(st)],
-          ]
-        : [[t("mini_mode"), t("mini_practice")]];
+    let minis;
+    if (game.mode === "daily") {
+      minis = [
+        [t("mini_streak"), st.currentStreak],
+        [t("mini_max"), st.maxStreak],
+        [t("mini_win"), winRate(st)],
+      ];
+    } else if (game.mode === "survival") {
+      minis = [
+        [t("mini_rounds"), game.round],
+        [t("mini_hits"), s],
+        [t("mini_best"), survival.best[surFlavor()] || 0],
+      ];
+    } else {
+      minis = [[t("mini_mode"), t("mini_practice")]];
+    }
     if (game.hard && game.readsTotal > 0) minis.push([t("mini_reads"), readsPct(game.readsCorrect, game.readsTotal)]);
     for (const [label, val] of minis) {
       const div = document.createElement("div");
@@ -1833,7 +2340,21 @@
       dom.resultMini.appendChild(div);
     }
 
-    // lesson of the day — daily games only
+    // new badges
+    if (newBadgesQueue.length) {
+      const names = newBadgesQueue.map((id) => {
+        const b = BADGES.find((x) => x.id === id);
+        return (b ? b.icon + " " : "") + t("b_" + id + "_n");
+      });
+      dom.newBadges.textContent = `${t("new_badge")} ${names.join(", ")}`;
+      dom.newBadges.hidden = false;
+      newBadgesQueue = [];
+    } else {
+      dom.newBadges.hidden = true;
+    }
+
+    renderEquity();
+
     if (game.mode === "daily") {
       const bank = LESSONS[prefs.lang] || LESSONS.en;
       const idx = ((game.number % bank.length) + bank.length) % bank.length;
@@ -1844,11 +2365,12 @@
       dom.lesson.hidden = true;
     }
 
+    dom.btnPracticeRes.textContent = game.mode === "survival" ? t("res_again") : t("res_practice");
     dom.sharePreview.hidden = true;
 
     startCountdown();
     showModal(dom.result);
-    if (announceIt) announce(`${s} / ${CONFIG.ROUNDS}`);
+    if (announceIt) announce(game.mode === "survival" ? t("sur_over", { n: game.round }) : `${s} / ${CONFIG.ROUNDS}`);
   }
 
   function winRate(st) {
@@ -1858,13 +2380,19 @@
   /* ---------------- Sharing (text) ---------------- */
   function shareLabel() {
     const hard = game.hard ? " HARD" : "";
-    return game.mode === "daily" ? `CANDLE${hard} #${game.number}` : `CANDLE${hard} practice·L${prefs.practiceLevel}`;
+    const blitz = game.blitz ? " ⚡" : "";
+    if (game.mode === "daily") return `CANDLE${hard} #${game.number}`;
+    if (game.mode === "survival") return `CANDLE SURVIVAL${hard}${blitz}`;
+    return `CANDLE${hard}${blitz} practice·L${prefs.practiceLevel}`;
   }
   function shareText() {
     const s = score();
-    const grid = game.results.map((r) => (r ? "🟩" : "🟥")).join("");
     const reads = game.hard && game.readsTotal ? ` · 🎯${readsPct(game.readsCorrect, game.readsTotal)}%` : "";
     const url = shareUrl();
+    if (game.mode === "survival") {
+      return `${shareLabel()}  ${s} 🟩 / ${game.round} ${t("sur_rounds_word")}${reads}${url ? "\n" + url : ""}`;
+    }
+    const grid = game.results.map((r) => (r ? "🟩" : "🟥")).join("");
     return `${shareLabel()}  ${s}/${CONFIG.ROUNDS}${reads}\n${grid}${url ? "\n" + url : ""}`;
   }
   function shareUrl() {
@@ -1881,7 +2409,7 @@
         await navigator.share({ text });
         return;
       } catch {
-        /* cancelled — fall through */
+        /* cancelled */
       }
     }
     const ok = await copyToClipboard(text);
@@ -1952,7 +2480,6 @@
     cv.height = H;
     const ctx = cv.getContext("2d");
 
-    // background
     ctx.fillStyle = IMG.bg;
     ctx.fillRect(0, 0, W, H);
     const grad = ctx.createRadialGradient(W / 2, -200, 100, W / 2, -200, 900);
@@ -1961,29 +2488,42 @@
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    // header
     ctx.fillStyle = IMG.text;
     ctx.font = "800 64px -apple-system, 'Segoe UI', Roboto, sans-serif";
     ctx.textAlign = "left";
     ctx.fillText("CANDLE", 64, 110);
+    let bx = 330;
     if (game.hard) {
       ctx.fillStyle = IMG.hard;
-      rr(ctx, 330, 60, 150, 60, 14);
+      rr(ctx, bx, 60, 150, 60, 14);
       ctx.fill();
       ctx.fillStyle = "#fff";
       ctx.font = "800 36px ui-monospace, Consolas, monospace";
-      ctx.fillText("HARD", 358, 102);
+      ctx.fillText("HARD", bx + 28, 102);
+      bx += 166;
+    }
+    if (game.blitz) {
+      ctx.fillStyle = IMG.accent;
+      rr(ctx, bx, 60, 80, 60, 14);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = "800 36px ui-monospace, Consolas, monospace";
+      ctx.fillText("⚡", bx + 22, 104);
     }
     ctx.fillStyle = IMG.dim;
     ctx.font = "600 36px ui-monospace, Consolas, monospace";
     ctx.textAlign = "right";
-    ctx.fillText(game.mode === "daily" ? `#${game.number}` : `practice L${prefs.practiceLevel}`, W - 64, 104);
+    ctx.fillText(
+      game.mode === "daily" ? `#${game.number}` : game.mode === "survival" ? "SURVIVAL" : `practice L${prefs.practiceLevel}`,
+      W - 64,
+      104
+    );
 
     // chart panel
     const cx = 64,
       cy = 170,
       cw = W - 128,
-      ch = 460;
+      ch = 420;
     ctx.fillStyle = IMG.panel;
     rr(ctx, cx, cy, cw, ch, 24);
     ctx.fill();
@@ -2000,7 +2540,8 @@
       plotY = cy + padT,
       plotW = cw - padL - padR,
       plotH = ch - padT - padB;
-    const series = game.series.slice(VIS_START, VIS_START + VISIBLE);
+    const w = viewWin();
+    const series = game.series.slice(w.winStart, w.winStart + w.nShow);
     let min = Infinity,
       max = -Infinity;
     for (const k of series) {
@@ -2011,23 +2552,23 @@
     min -= span * 0.06;
     max += span * 0.06;
     const yOf = (p) => plotY + (1 - (p - min) / (max - min)) * plotH;
-    const slot = plotW / VISIBLE;
+    const slot = plotW / Math.max(series.length, 1);
 
-    // divider
-    const dx = plotX + slot * CONFIG.HISTORY;
-    ctx.strokeStyle = IMG.faint;
-    ctx.setLineDash([6, 8]);
-    ctx.beginPath();
-    ctx.moveTo(dx, plotY);
-    ctx.lineTo(dx, plotY + plotH);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = IMG.faint;
-    ctx.font = "600 20px ui-monospace, Consolas, monospace";
-    ctx.textAlign = "left";
-    ctx.fillText("LIVE", dx + 8, plotY + 26);
+    if (w.divSlot != null) {
+      const dx = plotX + slot * w.divSlot;
+      ctx.strokeStyle = IMG.faint;
+      ctx.setLineDash([6, 8]);
+      ctx.beginPath();
+      ctx.moveTo(dx, plotY);
+      ctx.lineTo(dx, plotY + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = IMG.faint;
+      ctx.font = "600 20px ui-monospace, Consolas, monospace";
+      ctx.textAlign = "left";
+      ctx.fillText("LIVE", dx + 8, plotY + 26);
+    }
 
-    // candles
     const bodyW = Math.max(6, slot * 0.55);
     series.forEach((k, v) => {
       const x = plotX + slot * (v + 0.5);
@@ -2048,34 +2589,52 @@
     ctx.fillStyle = IMG.text;
     ctx.font = "800 140px -apple-system, 'Segoe UI', Roboto, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(`${score()}/${CONFIG.ROUNDS}`, W / 2, 778);
-    ctx.fillStyle = IMG.dim;
-    ctx.font = "600 38px -apple-system, 'Segoe UI', Roboto, sans-serif";
-    ctx.fillText(t("headline_" + score()).replace(/[🏆📈✅📉]/gu, "").trim(), W / 2, 838);
+    if (game.mode === "survival") {
+      ctx.fillText(String(score()), W / 2, 750);
+      ctx.fillStyle = IMG.dim;
+      ctx.font = "600 38px -apple-system, 'Segoe UI', Roboto, sans-serif";
+      ctx.fillText(t("png_rounds", { r: game.round }), W / 2, 812);
+    } else {
+      ctx.fillText(`${score()}/${CONFIG.ROUNDS}`, W / 2, 750);
+      ctx.fillStyle = IMG.dim;
+      ctx.font = "600 38px -apple-system, 'Segoe UI', Roboto, sans-serif";
+      ctx.fillText(t("headline_" + score()).replace(/[🏆📈✅📉]/gu, "").trim(), W / 2, 812);
+    }
 
-    // reads accuracy (hard) — its own line between headline and squares
     if (game.hard && game.readsTotal > 0) {
       ctx.fillStyle = IMG.hard;
       ctx.font = "700 32px ui-monospace, Consolas, monospace";
-      ctx.fillText(`🎯 ${readsPct(game.readsCorrect, game.readsTotal)}%`, W / 2, 888);
+      ctx.fillText(`🎯 ${readsPct(game.readsCorrect, game.readsTotal)}%`, W / 2, 862);
     }
 
-    // result squares
-    const sq = 74,
-      gap2 = 18;
-    const totalW = CONFIG.ROUNDS * sq + (CONFIG.ROUNDS - 1) * gap2;
-    let sx = (W - totalW) / 2;
-    for (const r of game.results) {
-      ctx.fillStyle = r ? IMG.bull : IMG.bear;
-      rr(ctx, sx, 916, sq, sq, 16);
-      ctx.fill();
-      sx += sq + gap2;
+    if (game.mode === "survival") {
+      ctx.fillStyle = IMG.text;
+      ctx.font = "700 44px -apple-system, 'Segoe UI', Roboto, sans-serif";
+      ctx.fillText(`🟩 ×${score()}   🟥 ×${CONFIG.SUR_LIVES - game.lives}`, W / 2, 940);
+    } else {
+      const sq = 74,
+        gap2 = 18;
+      const totalW = CONFIG.ROUNDS * sq + (CONFIG.ROUNDS - 1) * gap2;
+      let sx = (W - totalW) / 2;
+      for (const r of game.results) {
+        ctx.fillStyle = r ? IMG.bull : IMG.bear;
+        rr(ctx, sx, 884, sq, sq, 16);
+        ctx.fill();
+        sx += sq + gap2;
+      }
     }
 
-    // footer
+    // earned badges
+    const icons = BADGES.filter((b) => badgeEarned(b.id)).map((b) => b.icon).slice(0, 8);
+    if (icons.length) {
+      ctx.font = "34px serif";
+      ctx.fillStyle = IMG.text;
+      ctx.fillText(icons.join(" "), W / 2, 1000);
+    }
+
     ctx.fillStyle = IMG.faint;
     ctx.font = "600 30px ui-monospace, Consolas, monospace";
-    ctx.fillText("candles.gamestheory.org", W / 2, 1036);
+    ctx.fillText("candles.gamestheory.org", W / 2, 1044);
 
     return cv;
   }
@@ -2089,7 +2648,7 @@
       flashBtn($("#btn-share-img"), "img_failed");
       return;
     }
-    const name = `candle-${game.mode === "daily" ? game.number : "practice"}${game.hard ? "-hard" : ""}.png`;
+    const name = `candle-${game.mode === "daily" ? game.number : game.mode}${game.hard ? "-hard" : ""}.png`;
     cv.toBlob(async (blob) => {
       if (!blob) {
         flashBtn($("#btn-share-img"), "img_failed");
@@ -2101,7 +2660,7 @@
           await navigator.share({ files: [file], text: shareText() });
           return;
         } catch {
-          /* cancelled — fall through to download */
+          /* cancelled */
         }
       }
       if (previewURL) URL.revokeObjectURL(previewURL);
@@ -2140,6 +2699,106 @@
   }
 
   /* ---------------- Stats modal ---------------- */
+  function renderHeatmap(st) {
+    const wrap = $("#heatmap");
+    wrap.innerHTML = "";
+    const today = startOfDay(new Date());
+    const todayN = puzzleNumberFor(today);
+    const DAYS = 84;
+    const start = new Date(today);
+    start.setDate(start.getDate() - (DAYS - 1));
+    // align to Monday
+    const offset = (start.getDay() + 6) % 7;
+    let col = document.createElement("div");
+    col.className = "heat-col";
+    for (let b = 0; b < offset; b++) {
+      const cell = document.createElement("div");
+      cell.className = "heat-cell";
+      cell.style.visibility = "hidden";
+      col.appendChild(cell);
+    }
+    let slots = offset;
+    for (let d = 0; d < DAYS; d++) {
+      if (slots === 7) {
+        wrap.appendChild(col);
+        col = document.createElement("div");
+        col.className = "heat-col";
+        slots = 0;
+      }
+      const day = new Date(start);
+      day.setDate(day.getDate() + d);
+      const n = puzzleNumberFor(day);
+      const sc = st.history[n];
+      const cell = document.createElement("div");
+      let cls = "heat-cell";
+      if (sc != null) {
+        if (sc >= 6) cls += " w1";
+        else if (sc >= 4) cls += " w0";
+        else if (sc >= 2) cls += " l0";
+        else cls += " l1";
+      }
+      if (n === todayN) cls += " today";
+      cell.className = cls;
+      cell.title = `${day.toLocaleDateString(prefs.lang === "pl" ? "pl-PL" : "en-US")}: ${sc != null ? sc + "/6" : "—"}`;
+      col.appendChild(cell);
+      slots++;
+    }
+    wrap.appendChild(col);
+  }
+
+  function renderIndAcc(st) {
+    const box = $("#ind-acc");
+    const list = $("#ind-acc-list");
+    const tip = $("#acc-tip");
+    const entries = ALL_INDS.filter((k) => st.readsByKey[k] && st.readsByKey[k].t > 0);
+    if (statsView !== "hard" || entries.length === 0) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    list.innerHTML = "";
+    let weakest = null;
+    for (const k of entries) {
+      const e = st.readsByKey[k];
+      const pct = Math.round((e.c / e.t) * 100);
+      const row = document.createElement("div");
+      row.className = "acc-row" + (pct >= 75 ? " strong" : "");
+      const name = document.createElement("span");
+      name.className = "acc-name";
+      name.textContent = t("ind_name_" + k);
+      const bar = document.createElement("div");
+      bar.className = "acc-bar";
+      const fill = document.createElement("div");
+      fill.className = "acc-fill";
+      fill.style.width = pct + "%";
+      bar.appendChild(fill);
+      const val = document.createElement("span");
+      val.className = "acc-val";
+      val.textContent = `${pct}% (${e.t})`;
+      row.appendChild(name);
+      row.appendChild(bar);
+      row.appendChild(val);
+      list.appendChild(row);
+      if (e.t >= 4 && (!weakest || e.c / e.t < weakest.pct)) weakest = { k, pct: e.c / e.t, row };
+    }
+    if (weakest) {
+      weakest.row.classList.add("weak");
+      weakest.row.classList.remove("strong");
+      const bank = LESSONS[prefs.lang] || LESSONS.en;
+      const li = LESSON_FOR_KEY[weakest.k];
+      if (li != null && bank[li]) {
+        $("#acc-tip-eyebrow").textContent = t("acc_weak_tip", { name: t("ind_name_" + weakest.k) });
+        $("#acc-tip-name").textContent = bank[li][0];
+        $("#acc-tip-body").textContent = bank[li][1];
+        tip.hidden = false;
+      } else {
+        tip.hidden = true;
+      }
+    } else {
+      tip.hidden = true;
+    }
+  }
+
   function renderStats() {
     const st = statsView === "hard" ? stats.hard : stats.normal;
     $("#st-tab-normal").setAttribute("aria-selected", String(statsView === "normal"));
@@ -2156,6 +2815,8 @@
     } else {
       reads.hidden = true;
     }
+
+    renderIndAcc(st);
 
     const wrap = $("#dist");
     wrap.innerHTML = "";
@@ -2177,6 +2838,72 @@
       row.appendChild(bar);
       wrap.appendChild(row);
     }
+
+    renderHeatmap(st);
+    renderBadges();
+
+    const sb = $("#sur-best");
+    sb.textContent = t("sur_best_line", {
+      a: survival.best.norm || 0,
+      b: survival.best.hard || 0,
+      c: survival.best["norm-blitz"] || 0,
+      d: survival.best["hard-blitz"] || 0,
+    });
+    sb.hidden = false;
+  }
+
+  /* ---------------- Export / import ---------------- */
+  function doExport() {
+    const data = {};
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("candle.")) data[k] = localStorage.getItem(k);
+      }
+    } catch {
+      /* ignore */
+    }
+    const payload = { app: "candle", v: 1, exported: new Date().toISOString(), data };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const d = new Date();
+    const pad = (x) => String(x).padStart(2, "0");
+    a.href = url;
+    a.download = `candle-backup-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+    flashBtn($("#btn-export"), "exp_done");
+  }
+
+  function doImport(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const payload = JSON.parse(String(reader.result));
+        if (!payload || payload.app !== "candle" || !payload.data || typeof payload.data !== "object") {
+          flashBtn($("#btn-import"), "imp_fail");
+          return;
+        }
+        if (!window.confirm(t("imp_confirm"))) return;
+        for (const k in payload.data) {
+          if (k.startsWith("candle.") && typeof payload.data[k] === "string") {
+            try {
+              JSON.parse(payload.data[k]); // must be valid JSON
+              localStorage.setItem(k, payload.data[k]);
+            } catch {
+              /* skip invalid entries */
+            }
+          }
+        }
+        location.reload();
+      } catch {
+        flashBtn($("#btn-import"), "imp_fail");
+      }
+    };
+    reader.readAsText(file);
   }
 
   /* ---------------- Modal helpers ---------------- */
@@ -2222,10 +2949,18 @@
       renderAnalysis();
       renderReads();
       if (dom.result.open) openResult(false);
+      if (dom.stats.open) renderStats();
     }
   }
   function savePrefs() {
     Store.set(KEYS.prefs, prefs);
+  }
+
+  function restartCurrentMode() {
+    if (!game) return startDaily();
+    if (game.mode === "daily") startDaily();
+    else if (game.mode === "survival") startSurvival();
+    else startPractice();
   }
 
   /* ---------------- Event wiring ---------------- */
@@ -2241,13 +2976,25 @@
       if (game && game.mode === "practice" && !game.finished) return;
       startPractice();
     });
-    dom.btnNewChart.addEventListener("click", () => startPractice());
+    dom.tabSurvival.addEventListener("click", () => {
+      if (game && game.mode === "survival" && !game.finished) return;
+      startSurvival();
+    });
+    dom.btnNewChart.addEventListener("click", () => {
+      if (game && game.mode === "survival") startSurvival();
+      else startPractice();
+    });
 
     dom.btnHard.addEventListener("click", () => {
       prefs.hard = !prefs.hard;
       savePrefs();
-      if (game && game.mode === "daily") startDaily();
-      else startPractice();
+      restartCurrentMode();
+    });
+    dom.btnBlitz.addEventListener("click", () => {
+      prefs.blitz = !prefs.blitz;
+      savePrefs();
+      if (game && game.mode !== "daily") restartCurrentMode();
+      else renderModeBars();
     });
 
     dom.levelbar.addEventListener("click", (e) => {
@@ -2289,6 +3036,14 @@
       renderStats();
     });
 
+    $("#btn-export").addEventListener("click", doExport);
+    $("#btn-import").addEventListener("click", () => $("#import-file").click());
+    $("#import-file").addEventListener("change", (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) doImport(f);
+      e.target.value = "";
+    });
+
     $("#btn-sound").addEventListener("click", () => {
       prefs.sound = !prefs.sound;
       applySound();
@@ -2308,7 +3063,10 @@
 
     $("#btn-share").addEventListener("click", doShare);
     $("#btn-share-img").addEventListener("click", doShareImage);
-    $("#btn-practice").addEventListener("click", startPractice);
+    dom.btnPracticeRes.addEventListener("click", () => {
+      if (game && game.mode === "survival") startSurvival();
+      else startPractice();
+    });
 
     document.addEventListener("keydown", (e) => {
       const open = dom.help.open || dom.stats.open || dom.result.open;
@@ -2339,6 +3097,7 @@
 
     window.addEventListener("pagehide", () => {
       if (countdownTimer) window.clearInterval(countdownTimer);
+      stopTimer();
     });
   }
 
@@ -2357,6 +3116,7 @@
     applySound();
     wire();
     applyLang();
+    backfillHistory();
     startDaily();
 
     if (!prefs.seenHelp) {

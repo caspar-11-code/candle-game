@@ -72,9 +72,11 @@
         <div class="tabs" role="tablist" aria-label="Game mode">
           <button id="tab-daily" role="tab" aria-selected="true" type="button" data-i18n="tab_daily">Daily</button>
           <button id="tab-practice" role="tab" aria-selected="false" type="button" data-i18n="tab_practice">Practice</button>
+          <button id="tab-survival" role="tab" aria-selected="false" type="button" data-i18n="tab_survival">Survival</button>
         </div>
         <div class="modebar__right">
           <button id="btn-newchart" class="chip-btn" type="button" hidden>🔄 <span data-i18n="new_chart">New chart</span></button>
+          <button id="btn-blitz" class="blitz-toggle" type="button" aria-pressed="false" hidden title="Timed decisions">⚡BLITZ</button>
           <button id="btn-hard" class="hard-toggle" type="button" aria-pressed="false" title="Tag every indicator before you call">HARD</button>
         </div>
       </div>
@@ -119,6 +121,11 @@
       </figure>
 
       <p id="question" class="question" data-i18n-html="question_html">Will the next candle close <strong class="up">green</strong> or <strong class="down">red</strong>?</p>
+
+      <div id="blitz-timer" class="blitz-timer" hidden>
+        <div class="bt-track"><div id="bt-fill" class="bt-fill"></div></div>
+        <span id="bt-secs" class="bt-secs">10</span>
+      </div>
 
       <section id="reads" class="reads" hidden>
         <p class="reads__title" data-i18n="reads_title">HARD: tag your read on every indicator to unlock the call</p>
@@ -191,8 +198,33 @@
         <div class="stat"><span id="st-maxstreak" class="stat__num">0</span><span class="stat__lbl" data-i18n="st_max">max streak</span></div>
       </div>
       <p id="st-reads" class="st-extra" hidden></p>
+
+      <div id="ind-acc" hidden>
+        <h3 class="dist-title" data-i18n="acc_title">Read accuracy per indicator</h3>
+        <div id="ind-acc-list" class="acc-list"></div>
+        <div id="acc-tip" class="lesson" hidden>
+          <h3 id="acc-tip-eyebrow"></h3>
+          <p id="acc-tip-name" class="lesson__name"></p>
+          <p id="acc-tip-body" class="lesson__body"></p>
+        </div>
+      </div>
+
       <h3 class="dist-title" data-i18n="dist_title">Score distribution</h3>
       <div id="dist" class="dist" aria-label="Score distribution"></div>
+
+      <h3 class="dist-title" data-i18n="heat_title">Last 12 weeks</h3>
+      <div id="heatmap" class="heatmap" aria-label="Calendar heatmap"></div>
+
+      <h3 class="dist-title" data-i18n="badges_title">Badges</h3>
+      <div id="badges" class="badges"></div>
+
+      <p id="sur-best" class="st-extra" hidden></p>
+
+      <div class="backup-row">
+        <button id="btn-export" class="btn" type="button" data-i18n="btn_export">⬇ Export progress</button>
+        <button id="btn-import" class="btn" type="button" data-i18n="btn_import">⬆ Import</button>
+        <input id="import-file" type="file" accept="application/json" hidden />
+      </div>
     </div>
   </dialog>
 
@@ -207,7 +239,13 @@
       <p id="result-score" class="result-score">0 / 6</p>
       <div id="result-grid" class="result-grid" aria-hidden="true"></div>
 
+      <figure id="equity" class="equity" hidden>
+        <figcaption id="equity-cap"></figcaption>
+        <svg id="equity-svg" class="chart" aria-hidden="true"></svg>
+      </figure>
+
       <div class="result-mini" id="result-mini"></div>
+      <p id="new-badges" class="new-badges" hidden></p>
 
       <div class="result-actions">
         <button id="btn-share-img" class="btn btn--primary" type="button" data-i18n="res_share_img">📸 Share image</button>
