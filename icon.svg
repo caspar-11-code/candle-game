@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="CANDLE">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#121a2b"/>
+      <stop offset="1" stop-color="#070a11"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- bull candle -->
+  <line x1="186" y1="84" x2="186" y2="430" stroke="#16c784" stroke-width="16" stroke-linecap="round"/>
+  <rect x="150" y="150" width="72" height="206" rx="14" fill="#16c784"/>
+  <!-- bear candle -->
+  <line x1="334" y1="110" x2="334" y2="452" stroke="#ea3943" stroke-width="16" stroke-linecap="round"/>
+  <rect x="298" y="232" width="72" height="160" rx="14" fill="#ea3943"/>
+</svg>

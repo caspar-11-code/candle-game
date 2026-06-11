@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
+
+  <!-- Security: strict CSP. No inline scripts/styles, no external origins. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" />
+  <meta name="referrer" content="no-referrer" />
+
+  <title>CANDLE — the daily market-reading puzzle</title>
+  <meta name="description" content="One chart a day. Read trend, RSI, MACD, volume and support/resistance, then call the next candle. A skill-based daily puzzle that teaches real chart reading." />
+
+  <!-- Open Graph / social sharing -->
+  <meta property="og:title" content="CANDLE — the daily market puzzle" />
+  <meta property="og:description" content="One chart a day. Read the indicators, call the next candle, learn real technical analysis. Share your streak." />
+  <meta property="og:type" content="website" />
+
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0b0f17" />
+
+  <link rel="stylesheet" href="styles.css" />
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#controls">Skip to controls</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+        <line x1="11" y1="4" x2="11" y2="28" />
+        <rect class="bull" x="7" y="9" width="8" height="13" rx="2" />
+        <line x1="22" y1="6" x2="22" y2="29" />
+        <rect class="bear" x="18" y="14" width="8" height="11" rx="2" />
+      </svg>
+      <div class="brand__text">
+        <span class="brand__name">CANDLE</span>
+        <span class="brand__tag">read the market</span>
+      </div>
+    </div>
+
+    <nav class="toolbar" aria-label="Game options">
+      <button id="btn-lang" class="icon-btn icon-btn--lang" type="button" aria-label="Language">EN</button>
+      <button id="btn-help" class="icon-btn" type="button" aria-label="How to play" title="How to play">?</button>
+      <button id="btn-stats" class="icon-btn" type="button" aria-label="Statistics" title="Statistics">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="11" width="4" height="9" rx="1"/><rect x="10" y="5" width="4" height="15" rx="1"/><rect x="17" y="8" width="4" height="12" rx="1"/></svg>
+      </button>
+      <button id="btn-sound" class="icon-btn" type="button" aria-label="Toggle sound" title="Toggle sound" aria-pressed="true">
+        <span aria-hidden="true">♪</span>
+      </button>
+      <button id="btn-theme" class="icon-btn" type="button" aria-label="Toggle theme" title="Toggle theme">
+        <span aria-hidden="true">◑</span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="stage">
+    <section class="panel" aria-labelledby="puzzle-title">
+      <div class="meta">
+        <div class="meta__left">
+          <h1 id="puzzle-title" class="meta__title"><span id="mode-word">Daily</span> <span id="puzzle-number">#—</span></h1>
+          <p id="puzzle-date" class="meta__sub">—</p>
+        </div>
+        <ol id="progress" class="progress" aria-label="Round progress"></ol>
+      </div>
+
+      <div class="modebar">
+        <div class="tabs" role="tablist" aria-label="Game mode">
+          <button id="tab-daily" role="tab" aria-selected="true" type="button" data-i18n="tab_daily">Daily</button>
+          <button id="tab-practice" role="tab" aria-selected="false" type="button" data-i18n="tab_practice">Practice</button>
+        </div>
+        <div id="levelbar" class="levelbar" hidden>
+          <button type="button" data-level="1" data-i18n="lv_1">Pure price</button>
+          <button type="button" data-level="2" data-i18n="lv_2">+ Averages</button>
+          <button type="button" data-level="3" data-i18n="lv_3">+ Momentum</button>
+          <button type="button" data-level="4" data-i18n="lv_4">Pro</button>
+        </div>
+      </div>
+
+      <div id="indbar" class="indbar" aria-label="Indicators">
+        <button type="button" class="ind-chip" data-ind="ma" aria-pressed="true">MA</button>
+        <button type="button" class="ind-chip" data-ind="vol" aria-pressed="true">VOL</button>
+        <button type="button" class="ind-chip" data-ind="rsi" aria-pressed="true">RSI</button>
+        <button type="button" class="ind-chip" data-ind="macd" aria-pressed="true">MACD</button>
+        <button type="button" class="ind-chip" data-ind="sr" aria-pressed="true">S/R</button>
+      </div>
+
+      <figure class="chart-wrap" id="chart-wrap">
+        <svg id="chart" class="chart" role="img" aria-label="Candlestick chart"></svg>
+      </figure>
+
+      <figure class="subpanel" id="wrap-rsi" hidden>
+        <figcaption><span>RSI(14)</span><span id="rsi-val" class="pane-val">—</span></figcaption>
+        <svg id="panel-rsi" class="chart" aria-hidden="true"></svg>
+      </figure>
+
+      <figure class="subpanel" id="wrap-macd" hidden>
+        <figcaption><span>MACD(12,26,9)</span><span id="macd-val" class="pane-val">—</span></figcaption>
+        <svg id="panel-macd" class="chart" aria-hidden="true"></svg>
+      </figure>
+
+      <p id="question" class="question" data-i18n-html="question_html">Will the next candle close <strong class="up">green</strong> or <strong class="down">red</strong>?</p>
+
+      <div id="controls" class="controls">
+        <button id="btn-bull" class="call call--bull" type="button">
+          <span class="call__arrow" aria-hidden="true">▲</span>
+          <span class="call__label">BULL</span>
+          <span class="call__hint" data-i18n="bull_hint">close up</span>
+        </button>
+        <button id="btn-bear" class="call call--bear" type="button">
+          <span class="call__arrow" aria-hidden="true">▼</span>
+          <span class="call__label">BEAR</span>
+          <span class="call__hint" data-i18n="bear_hint">close down</span>
+        </button>
+      </div>
+
+      <div class="status">
+        <p id="score" class="score">Score <strong>0</strong> / 6</p>
+        <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
+      </div>
+
+      <section id="analysis" class="analysis" hidden aria-live="polite">
+        <h3 id="analysis-title">—</h3>
+        <p id="analysis-headline" class="an-headline">—</p>
+        <p id="analysis-lead" class="an-lead">—</p>
+        <ul id="analysis-list" class="an-list"></ul>
+      </section>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p data-i18n="footer_note">Skill, not luck — but the market always gets the last word. Scores stay on your device. Not financial advice.</p>
+    <button id="btn-how-footer" class="link-btn" type="button" data-i18n="footer_how">How it works</button>
+  </footer>
+
+  <!-- How to play -->
+  <dialog id="modal-help" class="modal" aria-labelledby="help-title">
+    <form method="dialog" class="modal__head">
+      <h2 id="help-title" data-i18n="help_title">How to play</h2>
+      <button class="icon-btn" value="close" aria-label="Close">✕</button>
+    </form>
+    <div class="modal__body" id="help-body"></div>
+  </dialog>
+
+  <!-- Stats -->
+  <dialog id="modal-stats" class="modal" aria-labelledby="stats-title">
+    <form method="dialog" class="modal__head">
+      <h2 id="stats-title" data-i18n="stats_title">Statistics</h2>
+      <button class="icon-btn" value="close" aria-label="Close">✕</button>
+    </form>
+    <div class="modal__body">
+      <div class="stat-grid">
+        <div class="stat"><span id="st-played" class="stat__num">0</span><span class="stat__lbl" data-i18n="st_played">played</span></div>
+        <div class="stat"><span id="st-winrate" class="stat__num">0</span><span class="stat__lbl" data-i18n="st_beat">% beat</span></div>
+        <div class="stat"><span id="st-streak" class="stat__num">0</span><span class="stat__lbl" data-i18n="st_streak">streak</span></div>
+        <div class="stat"><span id="st-maxstreak" class="stat__num">0</span><span class="stat__lbl" data-i18n="st_max">max streak</span></div>
+      </div>
+      <h3 class="dist-title" data-i18n="dist_title">Score distribution</h3>
+      <div id="dist" class="dist" aria-label="Score distribution"></div>
+    </div>
+  </dialog>
+
+  <!-- End of round -->
+  <dialog id="modal-result" class="modal modal--result" aria-labelledby="result-title">
+    <form method="dialog" class="modal__head">
+      <h2 id="result-title" data-i18n="res_title">Round complete</h2>
+      <button class="icon-btn" value="close" aria-label="Close">✕</button>
+    </form>
+    <div class="modal__body">
+      <p id="result-headline" class="result-headline">—</p>
+      <p id="result-score" class="result-score">0 / 6</p>
+      <div id="result-grid" class="result-grid" aria-hidden="true"></div>
+
+      <div class="result-mini" id="result-mini"></div>
+
+      <div class="result-actions">
+        <button id="btn-share" class="btn btn--primary" type="button" data-i18n="res_share">Share result</button>
+        <button id="btn-practice" class="btn" type="button" data-i18n="res_practice">Practice mode</button>
+      </div>
+      <p class="next-puzzle"><span data-i18n="res_next">Next daily in</span> <span id="countdown" class="mono">—</span></p>
+    </div>
+  </dialog>
+
+  <!-- live region for transient announcements -->
+  <p id="aria-live" class="visually-hidden" aria-live="assertive"></p>
+</body>
+</html>

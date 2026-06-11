@@ -1,0 +1,20 @@
+{
+  "name": "CANDLE — daily market puzzle",
+  "short_name": "CANDLE",
+  "description": "One chart a day. Read the trend, call the next candle. A skill-based daily market-reading puzzle.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0b0f17",
+  "theme_color": "#0b0f17",
+  "categories": ["games", "finance", "education"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
