@@ -1,5 +1,7 @@
 # CANDLE — the daily market-reading puzzle
 
+**Play it live: <https://candles.gamestheory.org>**
+
 One price chart a day, the same for everyone. Read the trend, momentum and
 volatility, then call whether the next candle closes **green (bull)** or
 **red (bear)**. Six calls per day. Beat the market (4/6+) to keep your streak,
