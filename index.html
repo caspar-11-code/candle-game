@@ -7,7 +7,7 @@
 
   <!-- Security: strict CSP. No inline scripts/styles, no external origins. -->
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" />
+        content="default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" />
   <meta name="referrer" content="no-referrer" />
 
   <title>CANDLE — the daily market-reading puzzle</title>
@@ -73,12 +73,19 @@
           <button id="tab-daily" role="tab" aria-selected="true" type="button" data-i18n="tab_daily">Daily</button>
           <button id="tab-practice" role="tab" aria-selected="false" type="button" data-i18n="tab_practice">Practice</button>
         </div>
-        <div id="levelbar" class="levelbar" hidden>
-          <button type="button" data-level="1" data-i18n="lv_1">Pure price</button>
-          <button type="button" data-level="2" data-i18n="lv_2">+ Averages</button>
-          <button type="button" data-level="3" data-i18n="lv_3">+ Momentum</button>
-          <button type="button" data-level="4" data-i18n="lv_4">Pro</button>
+        <div class="modebar__right">
+          <button id="btn-newchart" class="chip-btn" type="button" hidden>🔄 <span data-i18n="new_chart">New chart</span></button>
+          <button id="btn-hard" class="hard-toggle" type="button" aria-pressed="false" title="Tag every indicator before you call">HARD</button>
         </div>
+      </div>
+
+      <div id="levelbar" class="levelbar" hidden>
+        <button type="button" data-level="1" data-i18n="lv_1">Pure price</button>
+        <button type="button" data-level="2" data-i18n="lv_2">+ Averages</button>
+        <button type="button" data-level="3" data-i18n="lv_3">+ Momentum</button>
+        <button type="button" data-level="4" data-i18n="lv_4">Pro</button>
+        <button type="button" data-level="5" data-i18n="lv_5">Expert</button>
+        <button type="button" data-level="6" data-i18n="lv_6">Master</button>
       </div>
 
       <div id="indbar" class="indbar" aria-label="Indicators">
@@ -87,6 +94,9 @@
         <button type="button" class="ind-chip" data-ind="rsi" aria-pressed="true">RSI</button>
         <button type="button" class="ind-chip" data-ind="macd" aria-pressed="true">MACD</button>
         <button type="button" class="ind-chip" data-ind="sr" aria-pressed="true">S/R</button>
+        <button type="button" class="ind-chip" data-ind="bb" aria-pressed="true">BB</button>
+        <button type="button" class="ind-chip" data-ind="stoch" aria-pressed="true">STOCH</button>
+        <button type="button" class="ind-chip" data-ind="fib" aria-pressed="true">FIB</button>
       </div>
 
       <figure class="chart-wrap" id="chart-wrap">
@@ -103,7 +113,17 @@
         <svg id="panel-macd" class="chart" aria-hidden="true"></svg>
       </figure>
 
+      <figure class="subpanel" id="wrap-stoch" hidden>
+        <figcaption><span>STOCH(14,3,3)</span><span id="stoch-val" class="pane-val">—</span></figcaption>
+        <svg id="panel-stoch" class="chart" aria-hidden="true"></svg>
+      </figure>
+
       <p id="question" class="question" data-i18n-html="question_html">Will the next candle close <strong class="up">green</strong> or <strong class="down">red</strong>?</p>
+
+      <section id="reads" class="reads" hidden>
+        <p class="reads__title" data-i18n="reads_title">HARD: tag your read on every indicator to unlock the call</p>
+        <ul id="reads-list" class="reads-list"></ul>
+      </section>
 
       <div id="controls" class="controls">
         <button id="btn-bull" class="call call--bull" type="button">
@@ -160,12 +180,17 @@
       <button class="icon-btn" value="close" aria-label="Close">✕</button>
     </form>
     <div class="modal__body">
+      <div class="tabs tabs--mini" role="tablist" aria-label="Stats mode">
+        <button id="st-tab-normal" role="tab" aria-selected="true" type="button" data-i18n="st_normal">Normal</button>
+        <button id="st-tab-hard" role="tab" aria-selected="false" type="button">HARD</button>
+      </div>
       <div class="stat-grid">
         <div class="stat"><span id="st-played" class="stat__num">0</span><span class="stat__lbl" data-i18n="st_played">played</span></div>
         <div class="stat"><span id="st-winrate" class="stat__num">0</span><span class="stat__lbl" data-i18n="st_beat">% beat</span></div>
         <div class="stat"><span id="st-streak" class="stat__num">0</span><span class="stat__lbl" data-i18n="st_streak">streak</span></div>
         <div class="stat"><span id="st-maxstreak" class="stat__num">0</span><span class="stat__lbl" data-i18n="st_max">max streak</span></div>
       </div>
+      <p id="st-reads" class="st-extra" hidden></p>
       <h3 class="dist-title" data-i18n="dist_title">Score distribution</h3>
       <div id="dist" class="dist" aria-label="Score distribution"></div>
     </div>
@@ -185,9 +210,18 @@
       <div class="result-mini" id="result-mini"></div>
 
       <div class="result-actions">
-        <button id="btn-share" class="btn btn--primary" type="button" data-i18n="res_share">Share result</button>
-        <button id="btn-practice" class="btn" type="button" data-i18n="res_practice">Practice mode</button>
+        <button id="btn-share-img" class="btn btn--primary" type="button" data-i18n="res_share_img">📸 Share image</button>
+        <button id="btn-share" class="btn" type="button" data-i18n="res_share">Share text</button>
       </div>
+      <img id="share-preview" class="share-preview" alt="Share image preview" hidden />
+      <button id="btn-practice" class="btn btn--block" type="button" data-i18n="res_practice">Practice mode</button>
+
+      <div id="lesson" class="lesson" hidden>
+        <h3 id="lesson-eyebrow" data-i18n="lesson_title">📚 Lesson of the day</h3>
+        <p id="lesson-name" class="lesson__name"></p>
+        <p id="lesson-body" class="lesson__body"></p>
+      </div>
+
       <p class="next-puzzle"><span data-i18n="res_next">Next daily in</span> <span id="countdown" class="mono">—</span></p>
     </div>
   </dialog>

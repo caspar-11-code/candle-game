@@ -1,39 +1,42 @@
 /* ============================================================
-   CANDLE — daily market-reading puzzle (v2: indicator toolkit)
-   Pure client-side, no dependencies, no network.
+   CANDLE — daily market-reading puzzle (v3)
+   Pure client-side, no dependencies, no network, no paid services.
 
-   v2 adds: SMA20/EMA9 overlays, RSI(14), MACD(12,26,9),
-   volume, auto support/resistance, practice levels and a
-   per-round educational analysis — all computed with the
-   standard textbook formulas and zero lookahead.
+   v3 adds: Bollinger Bands, Stochastic, Fibonacci levels
+   (levels 5–6), HARD mode (tag every indicator before you
+   call — separate streak), lesson of the day, PNG share image
+   and an explicit practice "new chart" button.
    ============================================================ */
 "use strict";
 
 (function () {
   /* ---------------- Config ---------------- */
   const CONFIG = {
-    WARMUP: 50, // generated but never shown — lets RSI/MACD stabilise
-    HISTORY: 24, // candles visible before the first call
-    ROUNDS: 6, // number of predictions
-    PASS: 4, // correct calls needed to "beat the market"
-    EPOCH: new Date(2026, 0, 1), // local date of puzzle #1
+    WARMUP: 50,
+    HISTORY: 24,
+    ROUNDS: 6,
+    PASS: 4,
+    EPOCH: new Date(2026, 0, 1),
   };
-  const VISIBLE = CONFIG.HISTORY + CONFIG.ROUNDS; // chart window width in candles
+  const VISIBLE = CONFIG.HISTORY + CONFIG.ROUNDS;
   const GEN_TOTAL = CONFIG.WARMUP + VISIBLE;
-  const VIS_START = CONFIG.WARMUP; // absolute index of first visible candle
+  const VIS_START = CONFIG.WARMUP;
 
-  const ALL_INDS = ["ma", "vol", "rsi", "macd", "sr"];
+  const ALL_INDS = ["ma", "vol", "rsi", "macd", "sr", "bb", "stoch", "fib"];
   const LEVELS = [
     { id: 1, inds: [] },
     { id: 2, inds: ["ma"] },
     { id: 3, inds: ["ma", "vol", "rsi"] },
     { id: 4, inds: ["ma", "vol", "rsi", "macd", "sr"] },
+    { id: 5, inds: ["ma", "vol", "rsi", "macd", "sr", "bb", "stoch"] },
+    { id: 6, inds: ["ma", "vol", "rsi", "macd", "sr", "bb", "stoch", "fib"] },
   ];
 
   const KEYS = {
     stats: "candle.stats.v1",
+    statsHard: "candle.stats.hard.v1",
     prefs: "candle.prefs.v1",
-    daily: (n) => `candle.daily.v2.${n}`, // v2: new generator => new charts
+    daily: (n, hard) => `candle.daily${hard ? ".hard" : ""}.v2.${n}`,
   };
 
   /* ---------------- i18n ---------------- */
@@ -45,6 +48,9 @@
       lv_2: "+ Averages",
       lv_3: "+ Momentum",
       lv_4: "Pro",
+      lv_5: "Expert",
+      lv_6: "Master",
+      new_chart: "New chart",
       question_html:
         'Will the next candle close <strong class="up">green</strong> or <strong class="down">red</strong>?',
       bull_hint: "close up",
@@ -52,6 +58,7 @@
       score_label: "Score",
       fb_correct: "Correct — closed {word}.",
       fb_wrong: "Missed — closed {word}.",
+      fb_tag_first: "HARD: tag every indicator first.",
       w_green: "green (bull)",
       w_red: "red (bear)",
       w_greens: "green",
@@ -59,6 +66,16 @@
       word_up: "the upside (BULL)",
       word_down: "the downside (BEAR)",
       practice_sub: "Training — fresh chart, does not affect stats",
+      reads_title: "HARD: tag your read on every indicator to unlock the call",
+      you_said: "You:",
+      ind_name_ma: "Trend (MA)",
+      ind_name_vol: "Volume",
+      ind_name_rsi: "RSI",
+      ind_name_macd: "MACD",
+      ind_name_sr: "Support/Resist.",
+      ind_name_bb: "Bollinger",
+      ind_name_stoch: "Stochastic",
+      ind_name_fib: "Fibonacci",
       analysis_title: "Round {n} — what the chart was saying",
       an_correct_with: "Good call — the signals backed you up.",
       an_correct_mixed: "Good instinct — the signals were mixed, you read it anyway.",
@@ -97,6 +114,19 @@
       sig_vol_conf: "Volume well above average — real conviction behind the last {color} candle",
       sig_vol_low: "Volume below average — weak conviction, moves fade easily",
       sig_vol_norm: "Volume around average — no extra signal",
+      sig_bb_above:
+        "Close above the upper Bollinger Band — stretched; snap-backs are common (strong trends can ride the band)",
+      sig_bb_below: "Close below the lower Bollinger Band — stretched down; bounce odds grow",
+      sig_bb_squeeze: "Bollinger squeeze — volatility is coiled, a breakout is brewing (direction unknown)",
+      sig_bb_inside: "Price inside the Bollinger Bands — no volatility extreme",
+      sig_stoch_ob: "Stochastic {k} — overbought zone (above 80)",
+      sig_stoch_os: "Stochastic {k} — oversold zone (below 20)",
+      sig_stoch_xup: "Stochastic %K crossed above %D — fresh bullish momentum",
+      sig_stoch_xdown: "Stochastic %K crossed below %D — fresh bearish momentum",
+      sig_stoch_flat: "Stochastic {k} — mid-range, no signal",
+      sig_fib_sup: "Price testing the {r} Fibonacci retracement of the up-swing — a classic bounce spot",
+      sig_fib_res: "Price testing the {r} Fibonacci retracement of the down-swing — a classic rejection spot",
+      sig_fib_none: "No Fibonacci level in play",
       sig_streak:
         "{n} {color} candles in a row — momentum often carries on, but stretched runs love to snap back",
       headline_6: "Flawless read. 🏆",
@@ -107,19 +137,24 @@
       headline_1: "The market won today.",
       headline_0: "Brutal. Hit practice mode.",
       res_title: "Round complete",
-      res_share: "Share result",
+      res_share: "Share text",
+      res_share_img: "📸 Share image",
       res_practice: "Practice mode",
       res_next: "Next daily in",
       mini_streak: "Streak",
       mini_max: "Max",
       mini_win: "Win %",
+      mini_reads: "Reads %",
       mini_mode: "Mode",
       mini_practice: "Practice",
+      lesson_title: "📚 Lesson of the day",
       stats_title: "Statistics",
+      st_normal: "Normal",
       st_played: "played",
       st_beat: "% beat",
       st_streak: "streak",
       st_max: "max streak",
+      st_reads: "Lifetime read accuracy: {pct}%",
       dist_title: "Score distribution",
       help_title: "How to play",
       footer_note:
@@ -130,17 +165,23 @@
       ann_practice: "Practice round started.",
       share_copied: "Copied to clipboard!",
       share_failed: "Copy failed — select & copy",
+      img_saved: "PNG saved — share it anywhere!",
+      img_failed: "Could not create the image",
       help_html: `
         <p>Each day brings <strong>one chart</strong> — the same for everyone. Read it, then call whether the next candle closes <span class="up">green</span> (BULL) or <span class="down">red</span> (BEAR). Six calls per day; score <strong>4/6 or better</strong> to beat the market and keep your streak.</p>
         <h3>Your toolkit</h3>
         <ul>
-          <li><strong>MA — moving averages.</strong> <span class="kbd">SMA20</span> (orange) shows the slow trend, <span class="kbd">EMA9</span> (blue) reacts faster. Fast above slow with price above both = uptrend; the reverse = downtrend.</li>
-          <li><strong>RSI(14).</strong> Momentum from 0–100. Above 70 = overbought (pullback risk), below 30 = oversold (bounce odds), around 50 = neutral.</li>
-          <li><strong>MACD(12,26,9).</strong> The momentum engine. Histogram above zero and growing = bulls accelerating; shrinking histogram = the move is running out of fuel.</li>
-          <li><strong>S/R — support &amp; resistance.</strong> Dashed lines mark levels where price turned before. Approaches often bounce; clean breaks often run.</li>
-          <li><strong>Volume.</strong> Tall bars = conviction behind the move. A push on weak volume is easy to distrust.</li>
+          <li><strong>MA.</strong> <span class="kbd">SMA20</span> (orange) = slow trend, <span class="kbd">EMA9</span> (blue) reacts faster. Fast above slow with price above both = uptrend.</li>
+          <li><strong>RSI(14).</strong> Above 70 = overbought, below 30 = oversold, ~50 = neutral.</li>
+          <li><strong>MACD(12,26,9).</strong> Histogram above zero and growing = bulls accelerating; shrinking = move losing fuel.</li>
+          <li><strong>S/R.</strong> Dashed lines where price turned before. Approaches often bounce; clean breaks often run.</li>
+          <li><strong>Volume.</strong> Tall bars = conviction. A push on weak volume is easy to distrust.</li>
+          <li><strong>Bollinger(20,2).</strong> Price outside the bands = stretched; a tight squeeze = breakout brewing.</li>
+          <li><strong>Stochastic(14,3,3).</strong> Above 80 / below 20 = extremes; %K crossing %D = fresh momentum.</li>
+          <li><strong>Fibonacci.</strong> Retracements of the last big swing (0.382/0.5/0.618…) — classic reaction spots.</li>
         </ul>
-        <p><strong>Practice mode</strong> is unlimited and has levels — start with pure price action, add tools as you learn. After <em>every</em> round you get a breakdown of what the indicators were saying and why your call worked or didn't.</p>
+        <p><strong>HARD mode</strong> 🔥 — before every call you must tag each visible indicator yourself (▲ bullish / • neutral / ▼ bearish). The game grades your reads against the textbook reading. Separate daily streak.</p>
+        <p><strong>Practice mode</strong> is unlimited, has levels 1–6 and a fresh random chart every time (🔄). After <em>every</em> round you get a full breakdown of what the indicators were saying.</p>
         <p class="muted">Keyboard: <span class="kbd">↑</span>/<span class="kbd">B</span> = bull, <span class="kbd">↓</span>/<span class="kbd">S</span> = bear. Indicators give probabilities, not promises — that's the whole lesson. This is a game, not financial advice.</p>`,
     },
     pl: {
@@ -150,6 +191,9 @@
       lv_2: "+ Średnie",
       lv_3: "+ Momentum",
       lv_4: "Pro",
+      lv_5: "Ekspert",
+      lv_6: "Mistrz",
+      new_chart: "Nowy wykres",
       question_html:
         'Czy następna świeca zamknie się <strong class="up">na zielono</strong> czy <strong class="down">na czerwono</strong>?',
       bull_hint: "zamknięcie wyżej",
@@ -157,6 +201,7 @@
       score_label: "Wynik",
       fb_correct: "Trafione — zamknięcie {word}.",
       fb_wrong: "Pudło — zamknięcie {word}.",
+      fb_tag_first: "HARD: najpierw oznacz wszystkie wskaźniki.",
       w_green: "na zielono (byk)",
       w_red: "na czerwono (niedźwiedź)",
       w_greens: "zielonych",
@@ -164,6 +209,16 @@
       word_up: "wzrostów (BULL)",
       word_down: "spadków (BEAR)",
       practice_sub: "Trening — świeży wykres, nie wpływa na statystyki",
+      reads_title: "HARD: oznacz swój odczyt każdego wskaźnika, aby odblokować typowanie",
+      you_said: "Ty:",
+      ind_name_ma: "Trend (MA)",
+      ind_name_vol: "Wolumen",
+      ind_name_rsi: "RSI",
+      ind_name_macd: "MACD",
+      ind_name_sr: "Wsparcie/Opór",
+      ind_name_bb: "Bollinger",
+      ind_name_stoch: "Stochastic",
+      ind_name_fib: "Fibonacci",
       analysis_title: "Runda {n} — co mówił wykres",
       an_correct_with: "Dobre odczytanie — wskaźniki to potwierdzały.",
       an_correct_mixed: "Dobry instynkt — sygnały były mieszane, a mimo to trafiłeś.",
@@ -202,6 +257,19 @@
       sig_vol_conf: "Wolumen wyraźnie powyżej średniej — za ostatnią świecą ({color}) stoi przekonanie",
       sig_vol_low: "Wolumen poniżej średniej — słabe przekonanie, ruch łatwo gaśnie",
       sig_vol_norm: "Wolumen w okolicy średniej — bez dodatkowego sygnału",
+      sig_bb_above:
+        "Zamknięcie nad górną wstęgą Bollingera — rozciągnięcie; częste powroty do średniej (silny trend potrafi jechać po wstędze)",
+      sig_bb_below: "Zamknięcie pod dolną wstęgą Bollingera — rozciągnięcie w dół; rośnie szansa odbicia",
+      sig_bb_squeeze: "Ściśnięcie wstęg Bollingera — zmienność zwinięta, szykuje się wybicie (kierunek nieznany)",
+      sig_bb_inside: "Cena wewnątrz wstęg Bollingera — bez ekstremum zmienności",
+      sig_stoch_ob: "Stochastic {k} — strefa wykupienia (powyżej 80)",
+      sig_stoch_os: "Stochastic {k} — strefa wyprzedania (poniżej 20)",
+      sig_stoch_xup: "Stochastic: %K przecięło %D od dołu — świeże bycze momentum",
+      sig_stoch_xdown: "Stochastic: %K przecięło %D od góry — świeże niedźwiedzie momentum",
+      sig_stoch_flat: "Stochastic {k} — środek zakresu, bez sygnału",
+      sig_fib_sup: "Cena testuje zniesienie Fibonacciego {r} fali wzrostowej — klasyczne miejsce odbicia",
+      sig_fib_res: "Cena testuje zniesienie Fibonacciego {r} fali spadkowej — klasyczne miejsce odrzucenia",
+      sig_fib_none: "Żaden poziom Fibonacciego nie jest w grze",
       sig_streak:
         "{n} {color} świec z rzędu — momentum często niesie dalej, ale rozciągnięte serie lubią się cofać",
       headline_6: "Bezbłędny odczyt. 🏆",
@@ -212,19 +280,24 @@
       headline_1: "Dziś wygrał rynek.",
       headline_0: "Brutalnie. Wskocz do treningu.",
       res_title: "Runda zakończona",
-      res_share: "Udostępnij wynik",
+      res_share: "Udostępnij tekst",
+      res_share_img: "📸 Udostępnij obrazek",
       res_practice: "Tryb treningowy",
       res_next: "Nowa dzienna za",
       mini_streak: "Seria",
       mini_max: "Maks",
       mini_win: "% wygranych",
+      mini_reads: "% odczytów",
       mini_mode: "Tryb",
       mini_practice: "Trening",
+      lesson_title: "📚 Lekcja dnia",
       stats_title: "Statystyki",
+      st_normal: "Normalny",
       st_played: "rozegrane",
       st_beat: "% wygranych",
       st_streak: "seria",
       st_max: "maks. seria",
+      st_reads: "Trafność odczytów (łącznie): {pct}%",
       dist_title: "Rozkład wyników",
       help_title: "Jak grać",
       footer_note:
@@ -235,19 +308,81 @@
       ann_practice: "Runda treningowa rozpoczęta.",
       share_copied: "Skopiowano do schowka!",
       share_failed: "Kopiowanie nie wyszło — zaznacz i skopiuj",
+      img_saved: "PNG zapisany — udostępnij gdzie chcesz!",
+      img_failed: "Nie udało się stworzyć obrazka",
       help_html: `
-        <p>Każdego dnia dostajesz <strong>jeden wykres</strong> — ten sam dla wszystkich. Odczytaj go i oceń, czy następna świeca zamknie się <span class="up">na zielono</span> (BULL) czy <span class="down">na czerwono</span> (BEAR). Sześć typów dziennie; wynik <strong>4/6 lub lepszy</strong> pokonuje rynek i podtrzymuje Twoją serię.</p>
+        <p>Każdego dnia dostajesz <strong>jeden wykres</strong> — ten sam dla wszystkich. Odczytaj go i oceń, czy następna świeca zamknie się <span class="up">na zielono</span> (BULL) czy <span class="down">na czerwono</span> (BEAR). Sześć typów dziennie; wynik <strong>4/6+</strong> pokonuje rynek i podtrzymuje serię.</p>
         <h3>Twój zestaw narzędzi</h3>
         <ul>
-          <li><strong>MA — średnie kroczące.</strong> <span class="kbd">SMA20</span> (pomarańczowa) pokazuje wolny trend, <span class="kbd">EMA9</span> (niebieska) reaguje szybciej. Szybka nad wolną i cena nad obiema = trend wzrostowy; odwrotnie = spadkowy.</li>
-          <li><strong>RSI(14).</strong> Momentum w skali 0–100. Powyżej 70 = wykupienie (ryzyko korekty), poniżej 30 = wyprzedanie (szansa odbicia), okolice 50 = neutralnie.</li>
-          <li><strong>MACD(12,26,9).</strong> Silnik momentum. Histogram nad zerem i rosnący = byki przyspieszają; malejący histogram = ruch traci paliwo.</li>
-          <li><strong>S/R — wsparcia i opory.</strong> Przerywane linie to poziomy, na których cena już wcześniej zawracała. Podejścia często się odbijają, czyste wybicia często kontynuują ruch.</li>
-          <li><strong>Wolumen.</strong> Wysokie słupki = przekonanie za ruchem. Ruch na słabym wolumenie łatwo podważyć.</li>
+          <li><strong>MA.</strong> <span class="kbd">SMA20</span> (pomarańczowa) = wolny trend, <span class="kbd">EMA9</span> (niebieska) reaguje szybciej. Szybka nad wolną i cena nad obiema = trend wzrostowy.</li>
+          <li><strong>RSI(14).</strong> Powyżej 70 = wykupienie, poniżej 30 = wyprzedanie, ~50 = neutralnie.</li>
+          <li><strong>MACD(12,26,9).</strong> Histogram nad zerem i rosnący = byki przyspieszają; malejący = ruch traci paliwo.</li>
+          <li><strong>S/R.</strong> Przerywane linie tam, gdzie cena już zawracała. Podejścia często się odbijają, czyste wybicia kontynuują.</li>
+          <li><strong>Wolumen.</strong> Wysokie słupki = przekonanie. Ruch na słabym wolumenie łatwo podważyć.</li>
+          <li><strong>Bollinger(20,2).</strong> Cena poza wstęgami = rozciągnięcie; mocne ściśnięcie = szykuje się wybicie.</li>
+          <li><strong>Stochastic(14,3,3).</strong> Powyżej 80 / poniżej 20 = ekstrema; przecięcie %K i %D = świeże momentum.</li>
+          <li><strong>Fibonacci.</strong> Zniesienia ostatniej dużej fali (0.382/0.5/0.618…) — klasyczne miejsca reakcji.</li>
         </ul>
-        <p><strong>Tryb treningowy</strong> jest nielimitowany i ma poziomy — zacznij od czystej price action i dokładaj narzędzia w miarę nauki. Po <em>każdej</em> rundzie dostajesz rozbicie: co mówiły wskaźniki i dlaczego Twój typ zadziałał albo nie.</p>
+        <p><strong>Tryb HARD</strong> 🔥 — przed każdym typem sam oznaczasz odczyt każdego widocznego wskaźnika (▲ byczy / • neutralny / ▼ niedźwiedzi). Gra ocenia Twoje odczyty względem podręcznikowych. Osobna dzienna seria.</p>
+        <p><strong>Trening</strong> jest nielimitowany, ma poziomy 1–6 i za każdym razem świeży, losowy wykres (🔄). Po <em>każdej</em> rundzie dostajesz pełne rozbicie sygnałów.</p>
         <p class="muted">Klawiatura: <span class="kbd">↑</span>/<span class="kbd">B</span> = bull, <span class="kbd">↓</span>/<span class="kbd">S</span> = bear. Wskaźniki dają prawdopodobieństwa, nie obietnice — i to jest cała lekcja. To gra, nie porada inwestycyjna.</p>`,
     },
+  };
+
+  /* ---------------- Lessons of the day ---------------- */
+  const LESSONS = {
+    en: [
+      ["Doji", "A candle with a tiny body means buyers and sellers fought to a draw. After a strong trend, a doji is often the first hint that the move is running out of conviction."],
+      ["Engulfing pattern", "When a candle's body completely swallows the previous one in the opposite colour, sentiment may be flipping. The bigger the engulfing body and volume, the stronger the message."],
+      ["Wicks tell stories", "A long lower wick means sellers pushed price down and got rejected. The close matters more than the journey — wicks show who lost the battle inside the candle."],
+      ["The trend is your friend", "Most failed calls come from fighting the trend. Statistically, continuation is more common than reversal — betting on a turn needs stronger evidence than betting on more of the same."],
+      ["Volume confirms", "A breakout on high volume has conviction behind it; the same breakout on thin volume is suspect. Watch what volume does at key levels — it's the market's lie detector."],
+      ["Divergence", "When price makes a new high but RSI doesn't, momentum is quietly leaving the move. Divergences don't time the turn — they warn that fuel is running low."],
+      ["Overbought ≠ sell", "RSI above 70 means stretched, not doomed. In strong trends RSI can stay overbought for a long time. Extremes are warnings, not triggers."],
+      ["Role reversal", "Broken resistance often becomes support, and broken support becomes resistance. The market remembers prices where many people changed their minds."],
+      ["False breakouts", "Price pokes above resistance, sucks in buyers, then collapses back — a classic trap. Wait for the close beyond the level, not just the wick."],
+      ["Averages lag", "Moving-average crossovers confirm trends, they don't predict them. By the time the golden cross prints, part of the move is gone. They're filters, not crystal balls."],
+      ["MACD anatomy", "MACD histogram measures the gap between momentum and its own average — momentum of momentum. A shrinking histogram often turns before price does."],
+      ["Two market modes", "Markets alternate between trending and ranging. Momentum tools shine in trends; oscillators shine in ranges. The most expensive mistake is using the right tool in the wrong regime."],
+      ["Position sizing", "Pros don't win because they predict better — they lose less when wrong. Risking a fixed small % per trade survives losing streaks that wipe out over-leveraged accounts."],
+      ["Priced in", "Markets move on surprises, not news. If everyone expects good news, it's already in the price — that's why prices can fall on 'good' headlines."],
+      ["Round numbers", "Levels like 100 or 50 000 act as psychological magnets and barriers. Stop-losses and orders cluster there, which is exactly why price reacts around them."],
+      ["Bollinger squeeze", "When the bands pinch tight, volatility is compressed like a spring. The breakout direction is unknowable — but that a breakout is coming is the highest-probability bet on the chart."],
+      ["Stochastic context", "Stochastic works best in ranges: buy oversold, sell overbought. In a strong trend it stays pinned at the extreme — context first, oscillator second."],
+      ["Confluence", "One indicator is an opinion; three agreeing is a setup. A Fibonacci level sitting on old support with RSI oversold is stronger than any of them alone."],
+      ["Gaps", "Stocks gap because news lands while markets are closed. Many gaps eventually get 'filled' — price returns to the gap area — but 'eventually' can take years. Crypto, trading 24/7, barely gaps at all."],
+      ["Survivorship bias", "You hear from the trader who turned $1k into $1M, never from the thousand who blew up trying the same strategy. Judge strategies by all outcomes, not the winners' stories."],
+      ["Think in bets", "A good decision can lose and a bad decision can win — once. Judge your process over many rounds, not single results. That's the difference between trading and gambling."],
+      ["Keep a journal", "Writing down why you made each call exposes patterns your memory hides. Most traders discover they have one repeating mistake — you can't fix what you don't measure."],
+      ["FOMO is expensive", "Chasing a move that already happened is buying other people's profits. If you missed it, you missed it — the market prints new opportunities every day."],
+      ["Revenge trading", "Doubling down to 'win it back' after a loss is how small losses become big ones. The market doesn't know you're angry. Step away; the chart will still be there tomorrow."],
+    ],
+    pl: [
+      ["Doji", "Świeca z maleńkim korpusem oznacza remis kupujących i sprzedających. Po silnym trendzie doji bywa pierwszą oznaką, że ruchowi kończy się przekonanie."],
+      ["Formacja objęcia", "Gdy korpus świecy całkowicie pochłania poprzednią w przeciwnym kolorze, sentyment może się odwracać. Im większy korpus i wolumen objęcia, tym mocniejszy sygnał."],
+      ["Knoty opowiadają historie", "Długi dolny knot znaczy, że podaż zepchnęła cenę w dół i została odrzucona. Zamknięcie znaczy więcej niż droga — knot pokazuje, kto przegrał bitwę wewnątrz świecy."],
+      ["Trend jest Twoim przyjacielem", "Najwięcej pudeł bierze się z walki z trendem. Statystycznie kontynuacja jest częstsza niż odwrócenie — typ na zwrot wymaga mocniejszych dowodów niż typ na 'więcej tego samego'."],
+      ["Wolumen potwierdza", "Wybicie na wysokim wolumenie ma za sobą przekonanie; to samo wybicie na cienkim wolumenie jest podejrzane. Obserwuj wolumen przy kluczowych poziomach — to wykrywacz kłamstw rynku."],
+      ["Dywergencja", "Gdy cena robi nowy szczyt, a RSI już nie — momentum po cichu opuszcza ruch. Dywergencje nie wyznaczają momentu zwrotu — ostrzegają, że kończy się paliwo."],
+      ["Wykupienie ≠ sprzedawaj", "RSI powyżej 70 znaczy 'rozciągnięte', nie 'skazane'. W silnym trendzie RSI potrafi długo zostać wykupione. Ekstrema to ostrzeżenia, nie spusty."],
+      ["Zamiana ról", "Przebity opór często staje się wsparciem, a przebite wsparcie — oporem. Rynek pamięta ceny, przy których wielu ludzi zmieniło zdanie."],
+      ["Fałszywe wybicia", "Cena wystaje ponad opór, wciąga kupujących i zapada się z powrotem — klasyczna pułapka. Czekaj na zamknięcie ponad poziomem, nie na sam knot."],
+      ["Średnie się spóźniają", "Przecięcia średnich potwierdzają trendy, nie przewidują ich. Zanim wydrukuje się złoty krzyż, część ruchu już minęła. To filtry, nie szklane kule."],
+      ["Anatomia MACD", "Histogram MACD mierzy odstęp między momentum a jego własną średnią — momentum momentum. Malejący histogram często zawraca wcześniej niż cena."],
+      ["Dwa tryby rynku", "Rynki na zmianę trendują i chodzą bokiem. Narzędzia momentum błyszczą w trendach; oscylatory w konsolidacjach. Najdroższy błąd to dobre narzędzie w złym reżimie."],
+      ["Wielkość pozycji", "Zawodowcy nie wygrywają, bo lepiej przewidują — oni mniej tracą, gdy się mylą. Ryzykowanie stałego małego % na transakcję pozwala przeżyć serie strat, które zmiatają przelewarowane konta."],
+      ["W cenach", "Rynki ruszają się na zaskoczeniach, nie na newsach. Jeśli wszyscy oczekują dobrych wieści, są już w cenie — dlatego kursy potrafią spadać na 'dobrych' nagłówkach."],
+      ["Okrągłe liczby", "Poziomy jak 100 czy 50 000 działają jak psychologiczne magnesy i bariery. Grupują się tam zlecenia i stop-lossy — właśnie dlatego cena wokół nich reaguje."],
+      ["Ściśnięcie Bollingera", "Gdy wstęgi się zwężają, zmienność jest ściśnięta jak sprężyna. Kierunku wybicia nie da się przewidzieć — ale to, że wybicie nadchodzi, to najpewniejszy zakład na wykresie."],
+      ["Stochastic w kontekście", "Stochastic najlepiej działa w konsolidacji: kupuj wyprzedanie, sprzedawaj wykupienie. W silnym trendzie wisi przyklejony do ekstremum — najpierw kontekst, potem oscylator."],
+      ["Konfluencja", "Jeden wskaźnik to opinia; trzy zgodne to setup. Poziom Fibonacciego leżący na starym wsparciu przy wyprzedanym RSI znaczy więcej niż każdy z nich osobno."],
+      ["Luki", "Akcje robią luki, bo newsy spadają przy zamkniętym rynku. Wiele luk się 'domyka' — cena wraca w ich obszar — ale 'w końcu' potrafi trwać latami. Krypto, handlowane 24/7, prawie nie ma luk."],
+      ["Błąd przeżywalności", "Słyszysz o traderze, który zamienił 1k$ w 1M$, nigdy o tysiącu, którzy wyzerowali konta tą samą strategią. Oceniaj strategie po wszystkich wynikach, nie po opowieściach zwycięzców."],
+      ["Myśl zakładami", "Dobra decyzja może przegrać, a zła wygrać — raz. Oceniaj swój proces na wielu rundach, nie na pojedynczych wynikach. To różnica między tradingiem a hazardem."],
+      ["Prowadź dziennik", "Zapisywanie, dlaczego podjąłeś każdą decyzję, obnaża schematy, które pamięć ukrywa. Większość traderów odkrywa, że ma jeden powtarzalny błąd — nie naprawisz tego, czego nie mierzysz."],
+      ["FOMO kosztuje", "Gonienie ruchu, który już się wydarzył, to kupowanie cudzych zysków. Jak uciekł, to uciekł — rynek drukuje nowe okazje codziennie."],
+      ["Trading z zemsty", "Podwajanie stawki, żeby 'odrobić' po stracie, to przepis na zamianę małych strat w duże. Rynek nie wie, że jesteś zły. Odejdź od ekranu; wykres będzie tu jutro."],
+    ],
   };
 
   /* ---------------- Tiny utilities ---------------- */
@@ -261,13 +396,11 @@
     if (parent) parent.appendChild(e);
     return e;
   }
-
   function clampInt(v, min, max) {
     const n = Math.floor(Number(v));
     if (!Number.isFinite(n)) return min;
     return Math.min(max, Math.max(min, n));
   }
-
   function fmtPrice(p) {
     return p >= 100 ? p.toFixed(1) : p.toFixed(2);
   }
@@ -306,14 +439,10 @@
     return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
   }
 
-  /* ---------------- Market model ----------------
-     AR(1)-style returns: momentum (phi), mild drift and mean
-     reversion toward the start level. Volume is synthesised so
-     impulse candles carry more volume — like real tape. */
+  /* ---------------- Market model ---------------- */
   function generateSeries(seedStr) {
     const rand = makeRng(seedStr);
     const candles = [];
-
     const base = 80 + rand() * 120;
     let price = base;
     const drift = (rand() - 0.5) * 0.0016;
@@ -336,18 +465,9 @@
       const span = Math.abs(close - open);
       const high = Math.max(open, close) + span * (0.2 + rand() * 0.9) + open * vol * 0.15 * rand();
       const low = Math.min(open, close) - span * (0.2 + rand() * 0.9) - open * vol * 0.15 * rand();
-
-      // impulse moves print more volume
       const volume = Math.round(40 + 1500 * Math.min(0.06, Math.abs(ret)) + 35 * rand());
 
-      candles.push({
-        open,
-        close,
-        high,
-        low: Math.max(0.5, low),
-        bull: close >= open,
-        volume,
-      });
+      candles.push({ open, close, high, low: Math.max(0.5, low), bull: close >= open, volume });
       price = close;
     }
     return candles;
@@ -364,7 +484,6 @@
     }
     return out;
   }
-
   function emaArr(vals, n) {
     const out = new Array(vals.length).fill(null);
     if (vals.length < n) return out;
@@ -379,8 +498,6 @@
     }
     return out;
   }
-
-  // Wilder's RSI
   function rsiArr(closes, n) {
     const out = new Array(closes.length).fill(null);
     if (closes.length <= n) return out;
@@ -402,7 +519,6 @@
     }
     return out;
   }
-
   function macdCalc(closes, fast, slow, sigN) {
     const ef = emaArr(closes, fast);
     const es = emaArr(closes, slow);
@@ -423,8 +539,6 @@
     const hist = line.map((v, i) => (v != null && signal[i] != null ? v - signal[i] : null));
     return { line, signal, hist };
   }
-
-  // Wilder's ATR — used to scale support/resistance tolerances
   function atrArr(series, n) {
     const out = new Array(series.length).fill(null);
     if (series.length <= n) return out;
@@ -444,6 +558,55 @@
     }
     return out;
   }
+  // Bollinger Bands (20, 2) — rolling stddev around SMA
+  function bollingerArr(closes, n, mult) {
+    const up = new Array(closes.length).fill(null);
+    const lo = new Array(closes.length).fill(null);
+    let sum = 0,
+      sumsq = 0;
+    for (let i = 0; i < closes.length; i++) {
+      sum += closes[i];
+      sumsq += closes[i] * closes[i];
+      if (i >= n) {
+        sum -= closes[i - n];
+        sumsq -= closes[i - n] * closes[i - n];
+      }
+      if (i >= n - 1) {
+        const mean = sum / n;
+        const sd = Math.sqrt(Math.max(0, sumsq / n - mean * mean));
+        up[i] = mean + mult * sd;
+        lo[i] = mean - mult * sd;
+      }
+    }
+    return { up, lo };
+  }
+  // Slow Stochastic (14, 3, 3)
+  function stochArr(series, n, smooth, dN) {
+    const raw = new Array(series.length).fill(null);
+    for (let i = n - 1; i < series.length; i++) {
+      let hi = -Infinity,
+        lo = Infinity;
+      for (let j = i - n + 1; j <= i; j++) {
+        if (series[j].high > hi) hi = series[j].high;
+        if (series[j].low < lo) lo = series[j].low;
+      }
+      raw[i] = hi === lo ? 50 : (100 * (series[i].close - lo)) / (hi - lo);
+    }
+    const smaOf = (arr, m) => {
+      const out = new Array(arr.length).fill(null);
+      const q = [];
+      for (let i = 0; i < arr.length; i++) {
+        if (arr[i] == null) continue;
+        q.push(arr[i]);
+        if (q.length > m) q.shift();
+        if (q.length === m) out[i] = q.reduce((a, b) => a + b, 0) / m;
+      }
+      return out;
+    };
+    const k = smaOf(raw, smooth);
+    const d = smaOf(k, dN);
+    return { k, d };
+  }
 
   function computeIndicators(series) {
     const closes = series.map((c) => c.close);
@@ -455,27 +618,20 @@
       macd: macdCalc(closes, 12, 26, 9),
       volAvg10: smaArr(vols, 10),
       atr14: atrArr(series, 14),
+      bb: bollingerArr(closes, 20, 2),
+      stoch: stochArr(series, 14, 3, 3),
     };
   }
 
-  /* ---------------- Support / resistance ----------------
-     Swing pivots (2 candles each side) inside the revealed
-     window, clustered by an ATR-scaled tolerance. Pivots use
-     only already-revealed candles — zero lookahead. */
+  /* ---------------- Support / resistance ---------------- */
   function findLevels(series, startAbs, endAbs, tol) {
     const piv = [];
     for (let i = startAbs + 2; i <= endAbs - 2; i++) {
       const h = series[i].high,
         l = series[i].low;
-      if (
-        h >= series[i - 1].high && h >= series[i - 2].high &&
-        h >= series[i + 1].high && h >= series[i + 2].high
-      )
+      if (h >= series[i - 1].high && h >= series[i - 2].high && h >= series[i + 1].high && h >= series[i + 2].high)
         piv.push(h);
-      if (
-        l <= series[i - 1].low && l <= series[i - 2].low &&
-        l <= series[i + 1].low && l <= series[i + 2].low
-      )
+      if (l <= series[i - 1].low && l <= series[i - 2].low && l <= series[i + 1].low && l <= series[i + 2].low)
         piv.push(l);
     }
     piv.sort((a, b) => a - b);
@@ -492,7 +648,34 @@
     return clusters.map((c) => ({ price: c.sum / c.n, touches: c.n }));
   }
 
-  /* ---------------- Dates / puzzle number ---------------- */
+  /* ---------------- Fibonacci retracement of the dominant swing ---------------- */
+  const FIB_RATIOS = [0.236, 0.382, 0.5, 0.618, 0.786];
+  function computeFib(series, startAbs, endAbs, atr) {
+    let hi = -Infinity,
+      lo = Infinity,
+      hiI = startAbs,
+      loI = startAbs;
+    for (let i = startAbs; i <= endAbs; i++) {
+      if (series[i].high > hi) {
+        hi = series[i].high;
+        hiI = i;
+      }
+      if (series[i].low < lo) {
+        lo = series[i].low;
+        loI = i;
+      }
+    }
+    if (!isFinite(hi) || !isFinite(lo) || hi - lo < (atr || 0) * 3) return null;
+    const up = loI < hiI; // swing direction: low first = up-swing
+    return {
+      up,
+      hi,
+      lo,
+      levels: FIB_RATIOS.map((r) => ({ r, price: up ? hi - (hi - lo) * r : lo + (hi - lo) * r })),
+    };
+  }
+
+  /* ---------------- Dates / storage / prefs ---------------- */
   function startOfDay(d) {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
@@ -512,7 +695,6 @@
     }
   }
 
-  /* ---------------- Safe storage ---------------- */
   const Store = {
     get(key, fallback) {
       try {
@@ -527,7 +709,7 @@
       try {
         localStorage.setItem(key, JSON.stringify(val));
       } catch {
-        /* private mode / quota — game still works in-memory */
+        /* private mode / quota */
       }
     },
   };
@@ -542,6 +724,8 @@
       maxStreak: 0,
       lastNumber: null,
       dist: [0, 0, 0, 0, 0, 0, 0],
+      readsCorrect: 0,
+      readsTotal: 0,
     };
   }
   function normalizeStats(raw) {
@@ -554,9 +738,9 @@
     d.currentStreak = clampInt(raw.currentStreak, 0, 1e9);
     d.maxStreak = clampInt(raw.maxStreak, 0, 1e9);
     d.lastNumber = raw.lastNumber == null ? null : clampInt(raw.lastNumber, -1e9, 1e9);
-    if (Array.isArray(raw.dist) && raw.dist.length === 7) {
-      d.dist = raw.dist.map((x) => clampInt(x, 0, 1e9));
-    }
+    if (Array.isArray(raw.dist) && raw.dist.length === 7) d.dist = raw.dist.map((x) => clampInt(x, 0, 1e9));
+    d.readsCorrect = clampInt(raw.readsCorrect, 0, 1e12);
+    d.readsTotal = clampInt(raw.readsTotal, 0, 1e12);
     return d;
   }
 
@@ -568,7 +752,8 @@
       seenHelp: false,
       lang: nav.startsWith("pl") ? "pl" : "en",
       practiceLevel: 1,
-      indOn: { ma: true, vol: true, rsi: true, macd: true, sr: true },
+      hard: false,
+      indOn: { ma: true, vol: true, rsi: true, macd: true, sr: true, bb: true, stoch: true, fib: true },
     };
   }
   function normalizePrefs(raw) {
@@ -579,13 +764,14 @@
     d.seenHelp = raw.seenHelp === true;
     d.lang = raw.lang === "pl" ? "pl" : raw.lang === "en" ? "en" : d.lang;
     d.practiceLevel = clampInt(raw.practiceLevel, 1, LEVELS.length) || 1;
+    d.hard = raw.hard === true;
     if (raw.indOn && typeof raw.indOn === "object") {
       for (const k of ALL_INDS) d.indOn[k] = raw.indOn[k] !== false;
     }
     return d;
   }
 
-  /* ---------------- Sound (Web Audio, lazy) ---------------- */
+  /* ---------------- Sound ---------------- */
   const Sound = {
     ctx: null,
     ensure() {
@@ -625,20 +811,33 @@
   };
 
   /* ---------------- State ---------------- */
-  let stats = normalizeStats(Store.get(KEYS.stats, null));
   let prefs = normalizePrefs(Store.get(KEYS.prefs, null));
+  let stats = {
+    normal: normalizeStats(Store.get(KEYS.stats, null)),
+    hard: normalizeStats(Store.get(KEYS.statsHard, null)),
+  };
 
-  let game = null; // {mode, number, series, ind, round, results, finished}
-  let lastAnalysis = null; // {round, signals, consensus, userDir, actualDir}
+  let game = null; // {mode, hard, number, series, ind, round, results, finished, readsCorrect, readsTotal}
+  let lastAnalysis = null;
+  let hardReads = {}; // key -> 1|0|-1 for the CURRENT round
   let practiceCounter = 0;
   let busy = false;
   let countdownTimer = null;
+  let statsView = "normal";
+  let previewURL = null;
 
   function t(key, vars) {
     const pack = STR[prefs.lang] || STR.en;
     let s = pack[key] != null ? pack[key] : STR.en[key] != null ? STR.en[key] : key;
     if (vars) for (const k in vars) s = s.split("{" + k + "}").join(String(vars[k]));
     return s;
+  }
+  function bucketStats() {
+    return game && game.hard ? stats.hard : stats.normal;
+  }
+  function saveStats() {
+    Store.set(KEYS.stats, stats.normal);
+    Store.set(KEYS.statsHard, stats.hard);
   }
 
   /* ---------------- DOM refs ---------------- */
@@ -651,6 +850,9 @@
     macdWrap: $("#wrap-macd"),
     macdPanel: $("#panel-macd"),
     macdVal: $("#macd-val"),
+    stochWrap: $("#wrap-stoch"),
+    stochPanel: $("#panel-stoch"),
+    stochVal: $("#stoch-val"),
     modeWord: $("#mode-word"),
     number: $("#puzzle-number"),
     date: $("#puzzle-date"),
@@ -664,6 +866,10 @@
     tabPractice: $("#tab-practice"),
     levelbar: $("#levelbar"),
     indbar: $("#indbar"),
+    btnHard: $("#btn-hard"),
+    btnNewChart: $("#btn-newchart"),
+    reads: $("#reads"),
+    readsList: $("#reads-list"),
     analysis: $("#analysis"),
     anTitle: $("#analysis-title"),
     anHeadline: $("#analysis-headline"),
@@ -673,11 +879,16 @@
     helpBody: $("#help-body"),
     stats: $("#modal-stats"),
     result: $("#modal-result"),
+    resultTitle: $("#result-title"),
     resultHeadline: $("#result-headline"),
     resultScore: $("#result-score"),
     resultGrid: $("#result-grid"),
     resultMini: $("#result-mini"),
     countdown: $("#countdown"),
+    lesson: $("#lesson"),
+    lessonName: $("#lesson-name"),
+    lessonBody: $("#lesson-body"),
+    sharePreview: $("#share-preview"),
   };
 
   function announce(msg) {
@@ -694,15 +905,17 @@
     const act = activeIndSet();
     return new Set(ALL_INDS.filter((k) => act.has(k) && prefs.indOn[k]));
   }
+  function readKeys() {
+    return ALL_INDS.filter((k) => displayedInds().has(k));
+  }
 
-  /* ---------------- Geometry helpers ---------------- */
+  /* ---------------- Geometry ---------------- */
   function revealedCount() {
     return game.finished ? VISIBLE : Math.min(VISIBLE, CONFIG.HISTORY + game.round);
   }
   function lastRevealedAbs() {
     return VIS_START + revealedCount() - 1;
   }
-
   function chartGeom() {
     const cw = dom.chartWrap.clientWidth || 720;
     const W = Math.max(310, Math.min(1100, cw));
@@ -730,8 +943,8 @@
     const nVis = revealedCount();
     const visible = game.series.slice(VIS_START, VIS_START + nVis);
     const ind = game.ind;
+    const iLast = lastRevealedAbs();
 
-    // y-range from revealed candles only — no peeking at the future
     let min = Infinity,
       max = -Infinity;
     for (const k of visible) {
@@ -742,14 +955,22 @@
       min = (min || 100) * 0.98;
       max = (max || 100) * 1.02;
     }
+    // include Bollinger extremes so bands don't clip
+    if (shown.has("bb")) {
+      for (let v = 0; v < nVis; v++) {
+        const u = ind.bb.up[VIS_START + v],
+          l = ind.bb.lo[VIS_START + v];
+        if (u != null && u > max) max = u;
+        if (l != null && l < min) min = l;
+      }
+    }
     const span = max - min;
     min -= span * 0.07;
     max += span * 0.07;
 
     const yOf = (p) => padT + (1 - (p - min) / (max - min)) * priceH;
-    const xC = (v) => padL + slotW * (v + 0.5); // v = visible index
+    const xC = (v) => padL + slotW * (v + 0.5);
 
-    // gridlines + labels
     const ticks = 5;
     for (let i = 0; i <= ticks; i++) {
       const p = min + ((max - min) * i) / ticks;
@@ -759,15 +980,54 @@
       lb.textContent = p.toFixed(p < 100 ? 1 : 0);
     }
 
-    // history | live divider
     const divX = padL + slotW * CONFIG.HISTORY;
     svg("line", { class: "divider", x1: divX, y1: padT, x2: divX, y2: padT + priceH }, c);
     const dl = svg("text", { class: "divider-label", x: divX + 4, y: padT + 11 }, c);
     dl.textContent = "LIVE";
 
+    // Bollinger bands (under candles)
+    if (shown.has("bb")) {
+      const upPts = [],
+        loPts = [];
+      for (let v = 0; v < nVis; v++) {
+        const u = ind.bb.up[VIS_START + v],
+          l = ind.bb.lo[VIS_START + v];
+        if (u != null) upPts.push([xC(v), yOf(u)]);
+        if (l != null) loPts.push([xC(v), yOf(l)]);
+      }
+      if (upPts.length > 1 && loPts.length > 1) {
+        const d =
+          "M" +
+          upPts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" L") +
+          " L" +
+          loPts
+            .slice()
+            .reverse()
+            .map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`)
+            .join(" L") +
+          " Z";
+        svg("path", { class: "bb-fill", d }, c);
+        svg("polyline", { class: "bb-line", points: upPts.map((p) => p.join(",")).join(" ") }, c);
+        svg("polyline", { class: "bb-line", points: loPts.map((p) => p.join(",")).join(" ") }, c);
+      }
+    }
+
+    // Fibonacci retracement
+    if (shown.has("fib")) {
+      const fib = computeFib(game.series, VIS_START, iLast, ind.atr14[iLast]);
+      if (fib) {
+        for (const L of fib.levels) {
+          if (L.price < min || L.price > max) continue;
+          const y = yOf(L.price);
+          svg("line", { class: "fib-line", x1: padL, y1: y, x2: W - padR, y2: y }, c);
+          const lb = svg("text", { class: "fib-label", x: padL + 4, y: y - 3 }, c);
+          lb.textContent = String(L.r);
+        }
+      }
+    }
+
     // support / resistance
     if (shown.has("sr")) {
-      const iLast = lastRevealedAbs();
       const atr = ind.atr14[iLast] || game.series[iLast].close * 0.02;
       const close = game.series[iLast].close;
       const levels = findLevels(game.series, VIS_START, iLast, atr * 0.8);
@@ -778,13 +1038,7 @@
           if (L.price < min || L.price > max) continue;
           const y = yOf(L.price);
           const cls = group === res ? "res" : "sup";
-          svg("line", {
-            class: `srline ${cls}${L.touches < 2 ? " weak" : ""}`,
-            x1: padL,
-            y1: y,
-            x2: W - padR,
-            y2: y,
-          }, c);
+          svg("line", { class: `srline ${cls}${L.touches < 2 ? " weak" : ""}`, x1: padL, y1: y, x2: W - padR, y2: y }, c);
           const lb = svg("text", { class: `sr-label ${cls}`, x: W - padR - 2, y: y - 3, "text-anchor": "end" }, c);
           lb.textContent = fmtPrice(L.price);
         }
@@ -807,7 +1061,6 @@
           height: h,
         }, c);
       });
-      // volume average line
       const pts = [];
       visible.forEach((k, v) => {
         const a = ind.volAvg10[VIS_START + v];
@@ -848,7 +1101,6 @@
       svg("rect", { class: "body", x: x - bodyW / 2, y: yT, width: bodyW, height: Math.max(1.5, yB - yT), rx: 1.2 }, g);
     });
 
-    // placeholder for the candle being called
     if (!game.finished && nVis < VISIBLE) {
       const px = xC(nVis);
       svg("rect", { class: "placeholder-band", x: px - slotW / 2, y: padT, width: slotW, height: priceH }, c);
@@ -856,7 +1108,6 @@
       q.textContent = "?";
     }
 
-    // accessible description
     const last = visible[visible.length - 1];
     if (game.finished) {
       c.setAttribute("aria-label", `Final chart, ${VISIBLE} candles. Score ${score()} of ${CONFIG.ROUNDS}.`);
@@ -868,9 +1119,8 @@
     }
   }
 
-  /* ---------------- RSI panel ---------------- */
-  function renderRsi() {
-    const c = dom.rsiPanel;
+  /* ---------------- Oscillator panels ---------------- */
+  function renderOscPanel(c, drawFn) {
     while (c.firstChild) c.removeChild(c.firstChild);
     const { W, padL, padR } = chartGeom();
     const H = 86,
@@ -879,77 +1129,90 @@
       h = H - padT - padB;
     c.setAttribute("viewBox", `0 0 ${W} ${H}`);
     const slotW = (W - padL - padR) / VISIBLE;
-    const xC = (v) => padL + slotW * (v + 0.5);
-    const yOf = (val) => padT + (1 - val / 100) * h;
-
-    // 30/70 bands + zone
-    svg("rect", { class: "rsi-zone", x: padL, y: yOf(70), width: W - padL - padR, height: yOf(30) - yOf(70) }, c);
-    for (const lvl of [70, 30]) {
-      svg("line", { class: "rsi-band", x1: padL, y1: yOf(lvl), x2: W - padR, y2: yOf(lvl) }, c);
-      const lb = svg("text", { class: "axislabel", x: padL - 5, y: yOf(lvl) + 3, "text-anchor": "end" }, c);
-      lb.textContent = lvl;
-    }
-
-    const nVis = revealedCount();
-    const pts = [];
-    for (let v = 0; v < nVis; v++) {
-      const val = game.ind.rsi14[VIS_START + v];
-      if (val != null) pts.push(`${xC(v).toFixed(1)},${yOf(val).toFixed(1)}`);
-    }
-    if (pts.length > 1) svg("polyline", { class: "rsi-line", points: pts.join(" ") }, c);
+    drawFn({ c, W, padL, padR, padT, h, slotW, xC: (v) => padL + slotW * (v + 0.5) });
   }
 
-  /* ---------------- MACD panel ---------------- */
-  function renderMacd() {
-    const c = dom.macdPanel;
-    while (c.firstChild) c.removeChild(c.firstChild);
-    const { W, padL, padR } = chartGeom();
-    const H = 86,
-      padT = 6,
-      padB = 6,
-      h = H - padT - padB;
-    c.setAttribute("viewBox", `0 0 ${W} ${H}`);
-    const slotW = (W - padL - padR) / VISIBLE;
-    const xC = (v) => padL + slotW * (v + 0.5);
-
-    const nVis = revealedCount();
-    const { line, signal, hist } = game.ind.macd;
-    let m = 0;
-    for (let v = 0; v < nVis; v++) {
-      const i = VIS_START + v;
-      for (const arr of [line, signal, hist]) {
-        if (arr[i] != null && Math.abs(arr[i]) > m) m = Math.abs(arr[i]);
+  function renderRsi() {
+    renderOscPanel(dom.rsiPanel, ({ c, W, padL, padR, padT, h, xC }) => {
+      const yOf = (val) => padT + (1 - val / 100) * h;
+      svg("rect", { class: "rsi-zone", x: padL, y: yOf(70), width: W - padL - padR, height: yOf(30) - yOf(70) }, c);
+      for (const lvl of [70, 30]) {
+        svg("line", { class: "rsi-band", x1: padL, y1: yOf(lvl), x2: W - padR, y2: yOf(lvl) }, c);
+        const lb = svg("text", { class: "axislabel", x: padL - 5, y: yOf(lvl) + 3, "text-anchor": "end" }, c);
+        lb.textContent = lvl;
       }
-    }
-    if (m === 0) m = 1;
-    const mid = padT + h / 2;
-    const yOf = (val) => mid - (val / m) * (h / 2 - 4);
-
-    svg("line", { class: "zero-line", x1: padL, y1: mid, x2: W - padR, y2: mid }, c);
-
-    const bw = Math.max(2, slotW * 0.5);
-    for (let v = 0; v < nVis; v++) {
-      const hv = hist[VIS_START + v];
-      if (hv == null) continue;
-      const y = yOf(hv);
-      svg("rect", {
-        class: "macd-hist " + (hv >= 0 ? "pos" : "neg"),
-        x: xC(v) - bw / 2,
-        y: Math.min(mid, y),
-        width: bw,
-        height: Math.max(1, Math.abs(y - mid)),
-      }, c);
-    }
-    const mk = (arr, cls) => {
+      const nVis = revealedCount();
       const pts = [];
       for (let v = 0; v < nVis; v++) {
-        const val = arr[VIS_START + v];
+        const val = game.ind.rsi14[VIS_START + v];
         if (val != null) pts.push(`${xC(v).toFixed(1)},${yOf(val).toFixed(1)}`);
       }
-      if (pts.length > 1) svg("polyline", { class: cls, points: pts.join(" ") }, c);
-    };
-    mk(line, "macd-line");
-    mk(signal, "sig-line");
+      if (pts.length > 1) svg("polyline", { class: "rsi-line", points: pts.join(" ") }, c);
+    });
+  }
+
+  function renderStochPanel() {
+    renderOscPanel(dom.stochPanel, ({ c, W, padL, padR, padT, h, xC }) => {
+      const yOf = (val) => padT + (1 - val / 100) * h;
+      svg("rect", { class: "rsi-zone", x: padL, y: yOf(80), width: W - padL - padR, height: yOf(20) - yOf(80) }, c);
+      for (const lvl of [80, 20]) {
+        svg("line", { class: "rsi-band", x1: padL, y1: yOf(lvl), x2: W - padR, y2: yOf(lvl) }, c);
+        const lb = svg("text", { class: "axislabel", x: padL - 5, y: yOf(lvl) + 3, "text-anchor": "end" }, c);
+        lb.textContent = lvl;
+      }
+      const nVis = revealedCount();
+      const mk = (arr, cls) => {
+        const pts = [];
+        for (let v = 0; v < nVis; v++) {
+          const val = arr[VIS_START + v];
+          if (val != null) pts.push(`${xC(v).toFixed(1)},${yOf(val).toFixed(1)}`);
+        }
+        if (pts.length > 1) svg("polyline", { class: cls, points: pts.join(" ") }, c);
+      };
+      mk(game.ind.stoch.d, "stoch-d");
+      mk(game.ind.stoch.k, "stoch-k");
+    });
+  }
+
+  function renderMacd() {
+    renderOscPanel(dom.macdPanel, ({ c, W, padL, padR, padT, h, slotW, xC }) => {
+      const nVis = revealedCount();
+      const { line, signal, hist } = game.ind.macd;
+      let m = 0;
+      for (let v = 0; v < nVis; v++) {
+        const i = VIS_START + v;
+        for (const arr of [line, signal, hist]) {
+          if (arr[i] != null && Math.abs(arr[i]) > m) m = Math.abs(arr[i]);
+        }
+      }
+      if (m === 0) m = 1;
+      const mid = padT + h / 2;
+      const yOf = (val) => mid - (val / m) * (h / 2 - 4);
+      svg("line", { class: "zero-line", x1: padL, y1: mid, x2: W - padR, y2: mid }, c);
+      const bw = Math.max(2, slotW * 0.5);
+      for (let v = 0; v < nVis; v++) {
+        const hv = hist[VIS_START + v];
+        if (hv == null) continue;
+        const y = yOf(hv);
+        svg("rect", {
+          class: "macd-hist " + (hv >= 0 ? "pos" : "neg"),
+          x: xC(v) - bw / 2,
+          y: Math.min(mid, y),
+          width: bw,
+          height: Math.max(1, Math.abs(y - mid)),
+        }, c);
+      }
+      const mk = (arr, cls) => {
+        const pts = [];
+        for (let v = 0; v < nVis; v++) {
+          const val = arr[VIS_START + v];
+          if (val != null) pts.push(`${xC(v).toFixed(1)},${yOf(val).toFixed(1)}`);
+        }
+        if (pts.length > 1) svg("polyline", { class: cls, points: pts.join(" ") }, c);
+      };
+      mk(line, "macd-line");
+      mk(signal, "sig-line");
+    });
   }
 
   /* ---------------- Readouts ---------------- */
@@ -969,6 +1232,10 @@
       dom.macdVal.textContent = (hv >= 0 ? "+" : "") + hv.toFixed(2) + arrow;
       dom.macdVal.className = "pane-val " + (hv >= 0 ? "val-pos" : "val-neg");
     }
+
+    const k = game.ind.stoch.k[i];
+    dom.stochVal.textContent = k == null ? "—" : Math.round(k);
+    dom.stochVal.className = "pane-val" + (k >= 80 ? " val-ob" : k <= 20 ? " val-os" : "");
   }
 
   function renderCharts() {
@@ -976,15 +1243,15 @@
     const shown = displayedInds();
     dom.rsiWrap.hidden = !shown.has("rsi");
     dom.macdWrap.hidden = !shown.has("macd");
+    dom.stochWrap.hidden = !shown.has("stoch");
     renderMain();
     if (shown.has("rsi")) renderRsi();
     if (shown.has("macd")) renderMacd();
+    if (shown.has("stoch")) renderStochPanel();
     updateReadouts();
   }
 
-  /* ---------------- Signals (the teaching engine) ----------------
-     Each signal: {tKey, vars?, dir: 1|-1|0, w} — text is resolved
-     at render time so language switching re-translates history. */
+  /* ---------------- Signals (teaching engine) ---------------- */
   function computeSignals() {
     const i = lastRevealedAbs();
     const s = game.series;
@@ -997,9 +1264,9 @@
       const ef = ind.ema9[i],
         es = ind.sma20[i];
       if (ef != null && es != null) {
-        if (ef > es && close > es) out.push({ tKey: "sig_trend_up", dir: 1, w: 2 });
-        else if (ef < es && close < es) out.push({ tKey: "sig_trend_down", dir: -1, w: 2 });
-        else out.push({ tKey: "sig_trend_mixed", dir: 0, w: 0 });
+        if (ef > es && close > es) out.push({ key: "ma", tKey: "sig_trend_up", dir: 1, w: 2 });
+        else if (ef < es && close < es) out.push({ key: "ma", tKey: "sig_trend_down", dir: -1, w: 2 });
+        else out.push({ key: "ma", tKey: "sig_trend_mixed", dir: 0, w: 0 });
       }
     }
 
@@ -1007,11 +1274,11 @@
       const v = ind.rsi14[i];
       if (v != null) {
         const r = Math.round(v);
-        if (v >= 70) out.push({ tKey: "sig_rsi_ob", vars: { v: r }, dir: -1, w: 1 });
-        else if (v <= 30) out.push({ tKey: "sig_rsi_os", vars: { v: r }, dir: 1, w: 1 });
-        else if (v >= 55) out.push({ tKey: "sig_rsi_bull", vars: { v: r }, dir: 1, w: 1 });
-        else if (v <= 45) out.push({ tKey: "sig_rsi_bear", vars: { v: r }, dir: -1, w: 1 });
-        else out.push({ tKey: "sig_rsi_flat", vars: { v: r }, dir: 0, w: 0 });
+        if (v >= 70) out.push({ key: "rsi", tKey: "sig_rsi_ob", vars: { v: r }, dir: -1, w: 1 });
+        else if (v <= 30) out.push({ key: "rsi", tKey: "sig_rsi_os", vars: { v: r }, dir: 1, w: 1 });
+        else if (v >= 55) out.push({ key: "rsi", tKey: "sig_rsi_bull", vars: { v: r }, dir: 1, w: 1 });
+        else if (v <= 45) out.push({ key: "rsi", tKey: "sig_rsi_bear", vars: { v: r }, dir: -1, w: 1 });
+        else out.push({ key: "rsi", tKey: "sig_rsi_flat", vars: { v: r }, dir: 0, w: 0 });
       }
     }
 
@@ -1020,11 +1287,11 @@
         hp = ind.macd.hist[i - 1];
       if (h != null && hp != null) {
         const eps = close * 0.0001;
-        if (h > eps && h >= hp) out.push({ tKey: "sig_macd_bull", dir: 1, w: 1 });
-        else if (h < -eps && h <= hp) out.push({ tKey: "sig_macd_bear", dir: -1, w: 1 });
-        else if (h > eps && h < hp) out.push({ tKey: "sig_macd_fadeup", dir: 0, w: 0 });
-        else if (h < -eps && h > hp) out.push({ tKey: "sig_macd_fadedown", dir: 0, w: 0 });
-        else out.push({ tKey: "sig_macd_flat", dir: 0, w: 0 });
+        if (h > eps && h >= hp) out.push({ key: "macd", tKey: "sig_macd_bull", dir: 1, w: 1 });
+        else if (h < -eps && h <= hp) out.push({ key: "macd", tKey: "sig_macd_bear", dir: -1, w: 1 });
+        else if (h > eps && h < hp) out.push({ key: "macd", tKey: "sig_macd_fadeup", dir: 0, w: 0 });
+        else if (h < -eps && h > hp) out.push({ key: "macd", tKey: "sig_macd_fadedown", dir: 0, w: 0 });
+        else out.push({ key: "macd", tKey: "sig_macd_flat", dir: 0, w: 0 });
       }
     }
 
@@ -1042,10 +1309,9 @@
       const nearRes = dRes <= atr * 0.9;
       const nearSup = dSup <= atr * 0.9;
       if (nearRes && (!nearSup || dRes <= dSup))
-        out.push({ tKey: "sig_sr_res", vars: { lvl: fmtPrice(res.price) }, dir: -1, w: 1 });
-      else if (nearSup)
-        out.push({ tKey: "sig_sr_sup", vars: { lvl: fmtPrice(sup.price) }, dir: 1, w: 1 });
-      else out.push({ tKey: "sig_sr_none", dir: 0, w: 0 });
+        out.push({ key: "sr", tKey: "sig_sr_res", vars: { lvl: fmtPrice(res.price) }, dir: -1, w: 1 });
+      else if (nearSup) out.push({ key: "sr", tKey: "sig_sr_sup", vars: { lvl: fmtPrice(sup.price) }, dir: 1, w: 1 });
+      else out.push({ key: "sr", tKey: "sig_sr_none", dir: 0, w: 0 });
     }
 
     if (shown.has("vol")) {
@@ -1054,21 +1320,90 @@
       if (a) {
         if (v > a * 1.25)
           out.push({
+            key: "vol",
             tKey: "sig_vol_conf",
             vars: { colorKey: s[i].bull ? "w_greens" : "w_reds" },
             dir: s[i].bull ? 1 : -1,
             w: 1,
           });
-        else if (v < a * 0.75) out.push({ tKey: "sig_vol_low", dir: 0, w: 0 });
-        else out.push({ tKey: "sig_vol_norm", dir: 0, w: 0 });
+        else if (v < a * 0.75) out.push({ key: "vol", tKey: "sig_vol_low", dir: 0, w: 0 });
+        else out.push({ key: "vol", tKey: "sig_vol_norm", dir: 0, w: 0 });
       }
     }
 
-    // price-action streak — always on, every level
+    if (shown.has("bb")) {
+      const up = ind.bb.up[i],
+        lo = ind.bb.lo[i],
+        mid = ind.sma20[i];
+      if (up != null && lo != null && mid) {
+        // squeeze = current band width well below the recent average width
+        let wSum = 0,
+          wN = 0;
+        for (let v = 0; v < revealedCount(); v++) {
+          const u2 = ind.bb.up[VIS_START + v],
+            l2 = ind.bb.lo[VIS_START + v],
+            m2 = ind.sma20[VIS_START + v];
+          if (u2 != null && l2 != null && m2) {
+            wSum += (u2 - l2) / m2;
+            wN++;
+          }
+        }
+        const avgW = wN ? wSum / wN : 0;
+        const width = (up - lo) / mid;
+        if (close > up) out.push({ key: "bb", tKey: "sig_bb_above", dir: -1, w: 1 });
+        else if (close < lo) out.push({ key: "bb", tKey: "sig_bb_below", dir: 1, w: 1 });
+        else if (avgW && width < avgW * 0.65) out.push({ key: "bb", tKey: "sig_bb_squeeze", dir: 0, w: 0 });
+        else out.push({ key: "bb", tKey: "sig_bb_inside", dir: 0, w: 0 });
+      }
+    }
+
+    if (shown.has("stoch")) {
+      const k = ind.stoch.k[i],
+        d = ind.stoch.d[i],
+        kp = ind.stoch.k[i - 1],
+        dp = ind.stoch.d[i - 1];
+      if (k != null && d != null) {
+        const r = Math.round(k);
+        const xUp = kp != null && dp != null && kp <= dp && k > d;
+        const xDown = kp != null && dp != null && kp >= dp && k < d;
+        if (k >= 80) out.push({ key: "stoch", tKey: "sig_stoch_ob", vars: { k: r }, dir: -1, w: 1 });
+        else if (k <= 20) out.push({ key: "stoch", tKey: "sig_stoch_os", vars: { k: r }, dir: 1, w: 1 });
+        else if (xUp) out.push({ key: "stoch", tKey: "sig_stoch_xup", dir: 1, w: 1 });
+        else if (xDown) out.push({ key: "stoch", tKey: "sig_stoch_xdown", dir: -1, w: 1 });
+        else out.push({ key: "stoch", tKey: "sig_stoch_flat", vars: { k: r }, dir: 0, w: 0 });
+      }
+    }
+
+    if (shown.has("fib")) {
+      const atr = ind.atr14[i] || close * 0.02;
+      const fib = computeFib(s, VIS_START, i, atr);
+      let pushed = false;
+      if (fib) {
+        let best = null;
+        for (const L of fib.levels) {
+          const dst = Math.abs(close - L.price);
+          if (dst <= atr * 0.35 && (!best || dst < best.dst)) best = { L, dst };
+        }
+        if (best) {
+          out.push({
+            key: "fib",
+            tKey: fib.up ? "sig_fib_sup" : "sig_fib_res",
+            vars: { r: best.L.r },
+            dir: fib.up ? 1 : -1,
+            w: 1,
+          });
+          pushed = true;
+        }
+      }
+      if (!pushed) out.push({ key: "fib", tKey: "sig_fib_none", dir: 0, w: 0 });
+    }
+
+    // price-action streak — always on
     let n = 1;
     while (n < 6 && s[i - n] && s[i - n].bull === s[i].bull) n++;
     if (n >= 3)
       out.push({
+        key: "streak",
         tKey: "sig_streak",
         vars: { n, colorKey: s[i].bull ? "w_greens" : "w_reds" },
         dir: s[i].bull ? 1 : -1,
@@ -1082,25 +1417,74 @@
     return signals.reduce((acc, s) => acc + s.dir * s.w, 0);
   }
 
+  /* ---------------- HARD reads panel ---------------- */
+  function readsComplete() {
+    const keys = readKeys();
+    return keys.every((k) => hardReads[k] === 1 || hardReads[k] === 0 || hardReads[k] === -1);
+  }
+
+  function renderReads() {
+    const show = prefs.hard && game && !game.finished && readKeys().length > 0;
+    dom.reads.hidden = !show;
+    if (!show) return;
+    dom.readsList.innerHTML = "";
+    for (const k of readKeys()) {
+      const li = document.createElement("li");
+      li.className = "read-row";
+
+      const name = document.createElement("span");
+      name.className = "read-name";
+      name.textContent = t("ind_name_" + k);
+
+      const btns = document.createElement("span");
+      btns.className = "read-btns";
+      for (const [dir, cls, sym] of [[1, "up", "▲"], [0, "flat", "•"], [-1, "down", "▼"]]) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "read-btn " + cls;
+        b.textContent = sym;
+        b.setAttribute("aria-pressed", String(hardReads[k] === dir));
+        b.addEventListener("click", () => {
+          if (busy || game.finished) return;
+          hardReads[k] = dir;
+          renderReads();
+          updateCallGate();
+        });
+        btns.appendChild(b);
+      }
+
+      const verdict = document.createElement("span");
+      verdict.className = "read-verdict";
+      verdict.textContent = "";
+
+      li.appendChild(name);
+      li.appendChild(btns);
+      li.appendChild(verdict);
+      dom.readsList.appendChild(li);
+    }
+  }
+
+  function updateCallGate() {
+    if (!game || game.finished) return;
+    const gateOpen = !prefs.hard || readsComplete() || readKeys().length === 0;
+    dom.bull.disabled = busy || !gateOpen;
+    dom.bear.disabled = busy || !gateOpen;
+  }
+
   /* ---------------- Analysis card ---------------- */
   function renderAnalysis() {
     if (!lastAnalysis) {
       dom.analysis.hidden = true;
       return;
     }
-    const { round, signals, consensus, userDir, actualDir } = lastAnalysis;
+    const { round, signals, consensus, userDir, actualDir, reads } = lastAnalysis;
     dom.analysis.hidden = false;
     dom.anTitle.textContent = t("analysis_title", { n: round });
 
     const cDir = Math.sign(consensus);
     let hKey, hClass;
     if (userDir === actualDir) {
-      hKey =
-        cDir === 0
-          ? "an_correct_mixed"
-          : cDir !== userDir
-          ? "an_correct_against"
-          : "an_correct_with";
+      hKey = cDir === 0 ? "an_correct_mixed" : cDir !== userDir ? "an_correct_against" : "an_correct_with";
       hClass = "good";
     } else if (cDir === 0) {
       hKey = "an_wrong_mixed";
@@ -1112,17 +1496,11 @@
       hKey = "an_wrong_luck";
       hClass = "neutral";
     }
-    dom.anHeadline.textContent = t(hKey, {
-      word: t(actualDir > 0 ? "word_up" : "word_down"),
-    });
+    dom.anHeadline.textContent = t(hKey, { word: t(actualDir > 0 ? "word_up" : "word_down") });
     dom.anHeadline.className = "an-headline " + hClass;
 
     const leadTxt =
-      cDir > 0
-        ? t("lead_up", { s: "+" + consensus })
-        : cDir < 0
-        ? t("lead_down", { s: String(consensus) })
-        : t("lead_flat");
+      cDir > 0 ? t("lead_up", { s: "+" + consensus }) : cDir < 0 ? t("lead_down", { s: String(consensus) }) : t("lead_flat");
     dom.anLead.textContent = t("an_lead", { txt: leadTxt });
 
     dom.anList.innerHTML = "";
@@ -1142,6 +1520,17 @@
       const txt = document.createElement("span");
       txt.className = "an-text";
       txt.textContent = t(sig.tKey, vars);
+
+      // HARD: show what the player tagged for this indicator
+      if (reads && Object.prototype.hasOwnProperty.call(reads, sig.key)) {
+        const you = document.createElement("span");
+        you.className = "an-you";
+        const ud = reads[sig.key];
+        const sym = ud > 0 ? "▲" : ud < 0 ? "▼" : "•";
+        const ok = ud === sig.dir;
+        you.innerHTML = ` ${t("you_said")} <span class="${ok ? "hit" : "miss"}">${sym}${ok ? "✓" : "✗"}</span>`;
+        txt.appendChild(you);
+      }
 
       const verdict = document.createElement("span");
       if (sig.dir === 0) {
@@ -1171,34 +1560,34 @@
     while (ol.firstChild) ol.removeChild(ol.firstChild);
     for (let i = 0; i < CONFIG.ROUNDS; i++) {
       const li = document.createElement("li");
-      if (i < game.results.length) {
-        li.classList.add(game.results[i] ? "is-correct" : "is-wrong");
-      } else if (i === game.round && !game.finished) {
-        li.classList.add("is-current");
-      }
+      if (i < game.results.length) li.classList.add(game.results[i] ? "is-correct" : "is-wrong");
+      else if (i === game.round && !game.finished) li.classList.add("is-current");
       ol.appendChild(li);
     }
   }
-
   function score() {
     return game.results.filter(Boolean).length;
   }
-
   function renderScore() {
     dom.score.innerHTML = `${t("score_label")} <strong>${score()}</strong> / ${CONFIG.ROUNDS}`;
   }
-
   function setControls(enabled) {
-    dom.bull.disabled = !enabled;
-    dom.bear.disabled = !enabled;
+    if (!enabled) {
+      dom.bull.disabled = true;
+      dom.bear.disabled = true;
+    } else {
+      updateCallGate();
+    }
   }
 
-  /* ---------------- Mode / level / indicator bars ---------------- */
+  /* ---------------- Mode bars ---------------- */
   function renderModeBars() {
     const isPractice = game && game.mode === "practice";
     dom.tabDaily.setAttribute("aria-selected", String(!isPractice));
     dom.tabPractice.setAttribute("aria-selected", String(isPractice));
     dom.levelbar.hidden = !isPractice;
+    dom.btnNewChart.hidden = !isPractice;
+    dom.btnHard.setAttribute("aria-pressed", String(prefs.hard));
     $$("#levelbar button").forEach((b) => {
       b.classList.toggle("is-active", Number(b.dataset.level) === prefs.practiceLevel);
     });
@@ -1211,28 +1600,34 @@
     dom.indbar.hidden = act.size === 0;
   }
 
+  function updateMetaTitle() {
+    const base = t(game.mode === "daily" ? "tab_daily" : "tab_practice");
+    dom.modeWord.innerHTML = prefs.hard ? `${base} <span class="hard-badge">HARD</span>` : base;
+    dom.number.textContent = "#" + game.number;
+    dom.date.textContent = game.mode === "daily" ? formatDate(new Date()) : t("practice_sub");
+  }
+
   /* ---------------- Core loop ---------------- */
   function startDaily() {
     const today = new Date();
     const number = puzzleNumberFor(today);
-    const saved = Store.get(KEYS.daily(number), null);
+    const saved = Store.get(KEYS.daily(number, prefs.hard), null);
     const series = generateSeries("candle-daily-" + number);
     game = {
       mode: "daily",
+      hard: prefs.hard,
       number,
       series,
       ind: computeIndicators(series),
       round: saved ? clampInt(saved.round, 0, CONFIG.ROUNDS) : 0,
-      results:
-        saved && Array.isArray(saved.results)
-          ? saved.results.map(Boolean).slice(0, CONFIG.ROUNDS)
-          : [],
+      results: saved && Array.isArray(saved.results) ? saved.results.map(Boolean).slice(0, CONFIG.ROUNDS) : [],
       finished: saved ? !!saved.finished : false,
+      readsCorrect: saved ? clampInt(saved.readsCorrect, 0, 999) : 0,
+      readsTotal: saved ? clampInt(saved.readsTotal, 0, 999) : 0,
     };
     lastAnalysis = null;
-    dom.modeWord.textContent = t("tab_daily");
-    dom.number.textContent = "#" + number;
-    dom.date.textContent = formatDate(today);
+    hardReads = {};
+    updateMetaTitle();
     refreshAll();
     if (game.finished) {
       setControls(false);
@@ -1246,17 +1641,19 @@
     const series = generateSeries(seedStr);
     game = {
       mode: "practice",
+      hard: prefs.hard,
       number: practiceCounter,
       series,
       ind: computeIndicators(series),
       round: 0,
       results: [],
       finished: false,
+      readsCorrect: 0,
+      readsTotal: 0,
     };
     lastAnalysis = null;
-    dom.modeWord.textContent = t("tab_practice");
-    dom.number.textContent = "#" + practiceCounter;
-    dom.date.textContent = t("practice_sub");
+    hardReads = {};
+    updateMetaTitle();
     refreshAll();
     closeAllModals();
     announce(t("ann_practice"));
@@ -1268,6 +1665,7 @@
     renderProgress();
     renderScore();
     renderAnalysis();
+    renderReads();
     setControls(!game.finished);
     dom.feedback.textContent = "";
     dom.feedback.className = "feedback";
@@ -1276,13 +1674,29 @@
   function call(predictBull) {
     if (busy || !game || game.finished) return;
     if (game.round >= CONFIG.ROUNDS) return;
+    if (prefs.hard && readKeys().length > 0 && !readsComplete()) {
+      dom.feedback.textContent = t("fb_tag_first");
+      dom.feedback.className = "feedback bad";
+      return;
+    }
 
     busy = true;
     setControls(false);
 
-    // read the signals BEFORE the reveal — that's what the player saw
     const signals = computeSignals();
     const consensus = consensusOf(signals);
+
+    // HARD: grade the player's reads against the engine's
+    let readsSnapshot = null;
+    if (prefs.hard && readKeys().length > 0) {
+      readsSnapshot = Object.assign({}, hardReads);
+      for (const sig of signals) {
+        if (Object.prototype.hasOwnProperty.call(readsSnapshot, sig.key)) {
+          game.readsTotal += 1;
+          if (readsSnapshot[sig.key] === sig.dir) game.readsCorrect += 1;
+        }
+      }
+    }
 
     const target = game.series[VIS_START + CONFIG.HISTORY + game.round];
     const correct = target.bull === predictBull;
@@ -1295,14 +1709,16 @@
       consensus,
       userDir: predictBull ? 1 : -1,
       actualDir: target.bull ? 1 : -1,
+      reads: readsSnapshot,
     };
 
+    hardReads = {};
     renderCharts();
     renderProgress();
     renderScore();
     renderAnalysis();
+    renderReads();
 
-    // persist progress every round so a refresh can't reset (or replay) the daily
     if (game.mode === "daily") saveDaily();
 
     Sound.play(correct ? "good" : "bad");
@@ -1314,8 +1730,9 @@
         finishGame();
       } else {
         setControls(true);
-        renderCharts(); // redraw with the new placeholder
+        renderCharts();
         renderProgress();
+        renderReads();
       }
     }, 620);
   }
@@ -1335,6 +1752,7 @@
     setControls(false);
     renderCharts();
     renderProgress();
+    renderReads();
 
     if (game.mode === "daily") {
       recordDailyResult();
@@ -1349,52 +1767,63 @@
 
   /* ---------------- Stats + persistence ---------------- */
   function recordDailyResult() {
-    if (stats.lastNumber === game.number) return;
+    const st = bucketStats();
+    if (st.lastNumber === game.number) return;
     const s = score();
     const pass = s >= CONFIG.PASS;
 
-    stats.played += 1;
-    stats.totalCorrect += s;
-    stats.dist[s] = (stats.dist[s] || 0) + 1;
-    if (s === CONFIG.ROUNDS) stats.perfect += 1;
-    if (pass) stats.passes += 1;
+    st.played += 1;
+    st.totalCorrect += s;
+    st.dist[s] = (st.dist[s] || 0) + 1;
+    if (s === CONFIG.ROUNDS) st.perfect += 1;
+    if (pass) st.passes += 1;
+    st.readsCorrect += game.readsCorrect;
+    st.readsTotal += game.readsTotal;
 
     if (pass) {
-      if (stats.lastNumber === game.number - 1) stats.currentStreak += 1;
-      else stats.currentStreak = 1;
+      if (st.lastNumber === game.number - 1) st.currentStreak += 1;
+      else st.currentStreak = 1;
     } else {
-      stats.currentStreak = 0;
+      st.currentStreak = 0;
     }
-    if (stats.currentStreak > stats.maxStreak) stats.maxStreak = stats.currentStreak;
-    stats.lastNumber = game.number;
-
-    Store.set(KEYS.stats, stats);
+    if (st.currentStreak > st.maxStreak) st.maxStreak = st.currentStreak;
+    st.lastNumber = game.number;
+    saveStats();
   }
 
   function saveDaily() {
-    Store.set(KEYS.daily(game.number), {
+    Store.set(KEYS.daily(game.number, game.hard), {
       round: game.round,
       results: game.results,
       finished: game.finished,
+      readsCorrect: game.readsCorrect,
+      readsTotal: game.readsTotal,
     });
   }
 
   /* ---------------- Result modal ---------------- */
+  function readsPct(correct, total) {
+    return total ? Math.round((correct / total) * 100) : 0;
+  }
+
   function openResult(announceIt) {
     const s = score();
+    dom.resultTitle.innerHTML = game.hard ? `${t("res_title")} <span class="hard-badge">HARD</span>` : t("res_title");
     dom.resultHeadline.textContent = t("headline_" + s);
     dom.resultScore.textContent = `${s} / ${CONFIG.ROUNDS}`;
     dom.resultGrid.textContent = game.results.map((r) => (r ? "🟩" : "🟥")).join("");
 
     dom.resultMini.innerHTML = "";
+    const st = bucketStats();
     const minis =
       game.mode === "daily"
         ? [
-            [t("mini_streak"), stats.currentStreak],
-            [t("mini_max"), stats.maxStreak],
-            [t("mini_win"), winRate()],
+            [t("mini_streak"), st.currentStreak],
+            [t("mini_max"), st.maxStreak],
+            [t("mini_win"), winRate(st)],
           ]
         : [[t("mini_mode"), t("mini_practice")]];
+    if (game.hard && game.readsTotal > 0) minis.push([t("mini_reads"), readsPct(game.readsCorrect, game.readsTotal)]);
     for (const [label, val] of minis) {
       const div = document.createElement("div");
       const strong = document.createElement("strong");
@@ -1404,25 +1833,39 @@
       dom.resultMini.appendChild(div);
     }
 
+    // lesson of the day — daily games only
+    if (game.mode === "daily") {
+      const bank = LESSONS[prefs.lang] || LESSONS.en;
+      const idx = ((game.number % bank.length) + bank.length) % bank.length;
+      dom.lessonName.textContent = bank[idx][0];
+      dom.lessonBody.textContent = bank[idx][1];
+      dom.lesson.hidden = false;
+    } else {
+      dom.lesson.hidden = true;
+    }
+
+    dom.sharePreview.hidden = true;
+
     startCountdown();
     showModal(dom.result);
     if (announceIt) announce(`${s} / ${CONFIG.ROUNDS}`);
   }
 
-  function winRate() {
-    return stats.played ? Math.round((stats.passes / stats.played) * 100) : 0;
+  function winRate(st) {
+    return st.played ? Math.round((st.passes / st.played) * 100) : 0;
   }
 
-  /* ---------------- Sharing ---------------- */
+  /* ---------------- Sharing (text) ---------------- */
+  function shareLabel() {
+    const hard = game.hard ? " HARD" : "";
+    return game.mode === "daily" ? `CANDLE${hard} #${game.number}` : `CANDLE${hard} practice·L${prefs.practiceLevel}`;
+  }
   function shareText() {
     const s = score();
     const grid = game.results.map((r) => (r ? "🟩" : "🟥")).join("");
-    const label =
-      game.mode === "daily"
-        ? `CANDLE #${game.number}`
-        : `CANDLE practice·L${prefs.practiceLevel}`;
+    const reads = game.hard && game.readsTotal ? ` · 🎯${readsPct(game.readsCorrect, game.readsTotal)}%` : "";
     const url = shareUrl();
-    return `${label}  ${s}/${CONFIG.ROUNDS}\n${grid}${url ? "\n" + url : ""}`;
+    return `${shareLabel()}  ${s}/${CONFIG.ROUNDS}${reads}\n${grid}${url ? "\n" + url : ""}`;
   }
   function shareUrl() {
     if (location.protocol === "http:" || location.protocol === "https:") {
@@ -1438,11 +1881,11 @@
         await navigator.share({ text });
         return;
       } catch {
-        /* cancelled — fall through to clipboard */
+        /* cancelled — fall through */
       }
     }
     const ok = await copyToClipboard(text);
-    flashShareFeedback(ok);
+    flashBtn($("#btn-share"), ok ? "share_copied" : "share_failed");
   }
 
   async function copyToClipboard(text) {
@@ -1470,12 +1913,209 @@
     }
   }
 
-  function flashShareFeedback(ok) {
-    const btn = $("#btn-share");
+  function flashBtn(btn, key) {
     const original = btn.textContent;
-    btn.textContent = t(ok ? "share_copied" : "share_failed");
+    btn.textContent = t(key);
     announce(btn.textContent);
-    window.setTimeout(() => (btn.textContent = original), 1900);
+    window.setTimeout(() => (btn.textContent = original), 2200);
+  }
+
+  /* ---------------- Share image (canvas PNG) ---------------- */
+  const IMG = {
+    bg: "#0b0f17",
+    panel: "#111827",
+    line: "#1f2937",
+    text: "#e6edf3",
+    dim: "#9aa7b8",
+    faint: "#5b6678",
+    bull: "#16c784",
+    bear: "#ea3943",
+    accent: "#4f8cff",
+    hard: "#ff7a45",
+  };
+
+  function rr(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function buildShareCanvas() {
+    const W = 1080,
+      H = 1080;
+    const cv = document.createElement("canvas");
+    cv.width = W;
+    cv.height = H;
+    const ctx = cv.getContext("2d");
+
+    // background
+    ctx.fillStyle = IMG.bg;
+    ctx.fillRect(0, 0, W, H);
+    const grad = ctx.createRadialGradient(W / 2, -200, 100, W / 2, -200, 900);
+    grad.addColorStop(0, "#16213a");
+    grad.addColorStop(1, "rgba(11,15,23,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // header
+    ctx.fillStyle = IMG.text;
+    ctx.font = "800 64px -apple-system, 'Segoe UI', Roboto, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("CANDLE", 64, 110);
+    if (game.hard) {
+      ctx.fillStyle = IMG.hard;
+      rr(ctx, 330, 60, 150, 60, 14);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = "800 36px ui-monospace, Consolas, monospace";
+      ctx.fillText("HARD", 358, 102);
+    }
+    ctx.fillStyle = IMG.dim;
+    ctx.font = "600 36px ui-monospace, Consolas, monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(game.mode === "daily" ? `#${game.number}` : `practice L${prefs.practiceLevel}`, W - 64, 104);
+
+    // chart panel
+    const cx = 64,
+      cy = 170,
+      cw = W - 128,
+      ch = 460;
+    ctx.fillStyle = IMG.panel;
+    rr(ctx, cx, cy, cw, ch, 24);
+    ctx.fill();
+    ctx.strokeStyle = IMG.line;
+    ctx.lineWidth = 2;
+    rr(ctx, cx, cy, cw, ch, 24);
+    ctx.stroke();
+
+    const padL = 30,
+      padR = 30,
+      padT = 30,
+      padB = 30;
+    const plotX = cx + padL,
+      plotY = cy + padT,
+      plotW = cw - padL - padR,
+      plotH = ch - padT - padB;
+    const series = game.series.slice(VIS_START, VIS_START + VISIBLE);
+    let min = Infinity,
+      max = -Infinity;
+    for (const k of series) {
+      if (k.low < min) min = k.low;
+      if (k.high > max) max = k.high;
+    }
+    const span = max - min || 1;
+    min -= span * 0.06;
+    max += span * 0.06;
+    const yOf = (p) => plotY + (1 - (p - min) / (max - min)) * plotH;
+    const slot = plotW / VISIBLE;
+
+    // divider
+    const dx = plotX + slot * CONFIG.HISTORY;
+    ctx.strokeStyle = IMG.faint;
+    ctx.setLineDash([6, 8]);
+    ctx.beginPath();
+    ctx.moveTo(dx, plotY);
+    ctx.lineTo(dx, plotY + plotH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = IMG.faint;
+    ctx.font = "600 20px ui-monospace, Consolas, monospace";
+    ctx.textAlign = "left";
+    ctx.fillText("LIVE", dx + 8, plotY + 26);
+
+    // candles
+    const bodyW = Math.max(6, slot * 0.55);
+    series.forEach((k, v) => {
+      const x = plotX + slot * (v + 0.5);
+      ctx.strokeStyle = k.bull ? IMG.bull : IMG.bear;
+      ctx.fillStyle = k.bull ? IMG.bull : IMG.bear;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x, yOf(k.high));
+      ctx.lineTo(x, yOf(k.low));
+      ctx.stroke();
+      const yT = yOf(Math.max(k.open, k.close));
+      const yB = yOf(Math.min(k.open, k.close));
+      rr(ctx, x - bodyW / 2, yT, bodyW, Math.max(3, yB - yT), 3);
+      ctx.fill();
+    });
+
+    // score
+    ctx.fillStyle = IMG.text;
+    ctx.font = "800 140px -apple-system, 'Segoe UI', Roboto, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`${score()}/${CONFIG.ROUNDS}`, W / 2, 778);
+    ctx.fillStyle = IMG.dim;
+    ctx.font = "600 38px -apple-system, 'Segoe UI', Roboto, sans-serif";
+    ctx.fillText(t("headline_" + score()).replace(/[🏆📈✅📉]/gu, "").trim(), W / 2, 838);
+
+    // reads accuracy (hard) — its own line between headline and squares
+    if (game.hard && game.readsTotal > 0) {
+      ctx.fillStyle = IMG.hard;
+      ctx.font = "700 32px ui-monospace, Consolas, monospace";
+      ctx.fillText(`🎯 ${readsPct(game.readsCorrect, game.readsTotal)}%`, W / 2, 888);
+    }
+
+    // result squares
+    const sq = 74,
+      gap2 = 18;
+    const totalW = CONFIG.ROUNDS * sq + (CONFIG.ROUNDS - 1) * gap2;
+    let sx = (W - totalW) / 2;
+    for (const r of game.results) {
+      ctx.fillStyle = r ? IMG.bull : IMG.bear;
+      rr(ctx, sx, 916, sq, sq, 16);
+      ctx.fill();
+      sx += sq + gap2;
+    }
+
+    // footer
+    ctx.fillStyle = IMG.faint;
+    ctx.font = "600 30px ui-monospace, Consolas, monospace";
+    ctx.fillText("candles.gamestheory.org", W / 2, 1036);
+
+    return cv;
+  }
+
+  function doShareImage() {
+    if (!game) return;
+    let cv;
+    try {
+      cv = buildShareCanvas();
+    } catch {
+      flashBtn($("#btn-share-img"), "img_failed");
+      return;
+    }
+    const name = `candle-${game.mode === "daily" ? game.number : "practice"}${game.hard ? "-hard" : ""}.png`;
+    cv.toBlob(async (blob) => {
+      if (!blob) {
+        flashBtn($("#btn-share-img"), "img_failed");
+        return;
+      }
+      const file = new File([blob], name, { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], text: shareText() });
+          return;
+        } catch {
+          /* cancelled — fall through to download */
+        }
+      }
+      if (previewURL) URL.revokeObjectURL(previewURL);
+      previewURL = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = previewURL;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      dom.sharePreview.src = previewURL;
+      dom.sharePreview.hidden = false;
+      flashBtn($("#btn-share-img"), "img_saved");
+    }, "image/png");
   }
 
   /* ---------------- Countdown ---------------- */
@@ -1501,17 +2141,29 @@
 
   /* ---------------- Stats modal ---------------- */
   function renderStats() {
-    $("#st-played").textContent = stats.played;
-    $("#st-winrate").textContent = winRate();
-    $("#st-streak").textContent = stats.currentStreak;
-    $("#st-maxstreak").textContent = stats.maxStreak;
+    const st = statsView === "hard" ? stats.hard : stats.normal;
+    $("#st-tab-normal").setAttribute("aria-selected", String(statsView === "normal"));
+    $("#st-tab-hard").setAttribute("aria-selected", String(statsView === "hard"));
+    $("#st-played").textContent = st.played;
+    $("#st-winrate").textContent = winRate(st);
+    $("#st-streak").textContent = st.currentStreak;
+    $("#st-maxstreak").textContent = st.maxStreak;
+
+    const reads = $("#st-reads");
+    if (statsView === "hard" && st.readsTotal > 0) {
+      reads.innerHTML = t("st_reads", { pct: `<strong>${readsPct(st.readsCorrect, st.readsTotal)}</strong>` });
+      reads.hidden = false;
+    } else {
+      reads.hidden = true;
+    }
 
     const wrap = $("#dist");
     wrap.innerHTML = "";
-    const maxCount = Math.max(1, ...stats.dist);
-    const todayScore = game && game.mode === "daily" && game.finished ? score() : -1;
+    const maxCount = Math.max(1, ...st.dist);
+    const todayScore =
+      game && game.mode === "daily" && game.finished && (game.hard ? "hard" : "normal") === statsView ? score() : -1;
     for (let i = CONFIG.ROUNDS; i >= 0; i--) {
-      const count = stats.dist[i] || 0;
+      const count = st.dist[i] || 0;
       const row = document.createElement("div");
       row.className = "dist__row";
       const key = document.createElement("span");
@@ -1535,7 +2187,7 @@
         dlg.showModal();
         return;
       } catch {
-        /* already open or unsupported */
+        /* already open */
       }
     }
     dlg.setAttribute("open", "");
@@ -1556,8 +2208,7 @@
     if (meta) meta.setAttribute("content", prefs.theme === "light" ? "#f4f6fb" : "#0b0f17");
   }
   function applySound() {
-    const btn = $("#btn-sound");
-    btn.setAttribute("aria-pressed", String(prefs.sound));
+    $("#btn-sound").setAttribute("aria-pressed", String(prefs.sound));
   }
   function applyLang() {
     document.documentElement.lang = prefs.lang;
@@ -1566,10 +2217,10 @@
     $$("[data-i18n-html]").forEach((el) => (el.innerHTML = t(el.dataset.i18nHtml)));
     dom.helpBody.innerHTML = t("help_html");
     if (game) {
-      dom.modeWord.textContent = t(game.mode === "daily" ? "tab_daily" : "tab_practice");
-      dom.date.textContent = game.mode === "daily" ? formatDate(new Date()) : t("practice_sub");
+      updateMetaTitle();
       renderScore();
       renderAnalysis();
+      renderReads();
       if (dom.result.open) openResult(false);
     }
   }
@@ -1590,6 +2241,14 @@
       if (game && game.mode === "practice" && !game.finished) return;
       startPractice();
     });
+    dom.btnNewChart.addEventListener("click", () => startPractice());
+
+    dom.btnHard.addEventListener("click", () => {
+      prefs.hard = !prefs.hard;
+      savePrefs();
+      if (game && game.mode === "daily") startDaily();
+      else startPractice();
+    });
 
     dom.levelbar.addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-level]");
@@ -1607,15 +2266,27 @@
       const k = btn.dataset.ind;
       prefs.indOn[k] = !(prefs.indOn[k] !== false);
       savePrefs();
+      delete hardReads[k];
       renderModeBars();
       renderCharts();
+      renderReads();
+      updateCallGate();
     });
 
     $("#btn-help").addEventListener("click", () => showModal(dom.help));
     $("#btn-how-footer").addEventListener("click", () => showModal(dom.help));
     $("#btn-stats").addEventListener("click", () => {
+      statsView = prefs.hard ? "hard" : "normal";
       renderStats();
       showModal(dom.stats);
+    });
+    $("#st-tab-normal").addEventListener("click", () => {
+      statsView = "normal";
+      renderStats();
+    });
+    $("#st-tab-hard").addEventListener("click", () => {
+      statsView = "hard";
+      renderStats();
     });
 
     $("#btn-sound").addEventListener("click", () => {
@@ -1636,6 +2307,7 @@
     });
 
     $("#btn-share").addEventListener("click", doShare);
+    $("#btn-share-img").addEventListener("click", doShareImage);
     $("#btn-practice").addEventListener("click", startPractice);
 
     document.addEventListener("keydown", (e) => {
@@ -1651,7 +2323,6 @@
       }
     });
 
-    // responsive redraw — charts use real pixel-width viewBoxes
     if ("ResizeObserver" in window) {
       let raf = 0;
       const ro = new ResizeObserver(() => {
