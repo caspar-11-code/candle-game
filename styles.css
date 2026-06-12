@@ -862,6 +862,47 @@ body::before {
 .badge.locked { opacity: 0.35; filter: grayscale(1); }
 .badge.earned { border-color: var(--ma-slow); }
 
+.heat-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 16px;
+  font-size: 0.68rem;
+  color: var(--text-faint);
+  font-family: var(--ff-mono);
+}
+.heat-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.heat-legend .heat-cell { width: 11px; height: 11px; }
+
+.update-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 0.86rem;
+  color: var(--text);
+  box-shadow: var(--shadow);
+  z-index: 100;
+  animation: an-in .3s ease both;
+}
+.update-toast button {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-family: inherit;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
 .backup-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
 .backup-row .btn { font-size: 0.82rem; padding: 10px 8px; }
 

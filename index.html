@@ -11,6 +11,7 @@
   <meta name="referrer" content="no-referrer" />
 
   <title>CANDLE — the daily market-reading puzzle</title>
+  <link rel="canonical" href="https://candles.gamestheory.org/" />
   <meta name="description" content="One chart a day. Read trend, RSI, MACD, volume and support/resistance, then call the next candle. A skill-based daily puzzle that teaches real chart reading." />
 
   <!-- Open Graph / social sharing -->
@@ -231,6 +232,7 @@
 
       <h3 class="dist-title" data-i18n="heat_title">Last 12 weeks</h3>
       <div id="heatmap" class="heatmap" aria-label="Calendar heatmap"></div>
+      <div id="heat-legend" class="heat-legend"></div>
 
       <h3 class="dist-title" data-i18n="badges_title">Badges</h3>
       <div id="badges" class="badges"></div>
@@ -270,6 +272,7 @@
         <button id="btn-share" class="btn" type="button" data-i18n="res_share">Share text</button>
       </div>
       <img id="share-preview" class="share-preview" alt="Share image preview" hidden />
+      <button id="btn-challenge" class="btn btn--block" type="button" hidden></button>
       <button id="btn-practice" class="btn btn--block" type="button" data-i18n="res_practice">Practice mode</button>
       <button id="btn-other-daily" class="btn btn--block btn--cta" type="button" hidden></button>
 
@@ -285,5 +288,11 @@
 
   <!-- live region for transient announcements -->
   <p id="aria-live" class="visually-hidden" aria-live="assertive"></p>
+
+  <!-- new version available -->
+  <div id="update-toast" class="update-toast" hidden>
+    <span data-i18n="upd_text">New version ready</span>
+    <button id="btn-update" type="button" data-i18n="upd_btn">Refresh</button>
+  </div>
 </body>
 </html>

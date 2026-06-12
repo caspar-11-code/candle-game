@@ -10,7 +10,7 @@
 "use strict";
 
 (function () {
-  const APP_VERSION = "v6";
+  const APP_VERSION = "v7";
 
   /* ---------------- Config ---------------- */
   const CONFIG = {
@@ -279,6 +279,12 @@
       real_reveal: "🌍 That was {sym} · {from} → {to}",
       practice_sub_real: "Real, anonymized market history — revealed after the round",
       freeze_used: "🧊 Streak shield used — your streak survived the missed day!",
+      challenge_btn: "🤝 Challenge a friend",
+      challenge_text: "CANDLE challenge — I scored {s}/6. Same chart, beat me:",
+      challenge_sub: "Challenge — the exact same chart as your friend's",
+      upd_text: "New version ready",
+      upd_btn: "Refresh",
+      heat_none: "none",
       sur_milestone: "🎉 {n} hits — keep going!",
       cert_title: "CERTIFICATE",
       cert_sub: "CANDLE Academy — course completion",
@@ -511,6 +517,12 @@
       real_reveal: "🌍 To był {sym} · {from} → {to}",
       practice_sub_real: "Prawdziwa, anonimowa historia rynku — odkryje się po rundzie",
       freeze_used: "🧊 Tarcza serii zużyta — Twoja seria przetrwała opuszczony dzień!",
+      challenge_btn: "🤝 Wyzwij znajomego",
+      challenge_text: "Wyzwanie CANDLE — mam {s}/6. Ten sam wykres, pobij mnie:",
+      challenge_sub: "Wyzwanie — dokładnie ten sam wykres co u znajomego",
+      upd_text: "Nowa wersja gotowa",
+      upd_btn: "Odśwież",
+      heat_none: "nie grano",
       sur_milestone: "🎉 {n} trafień — tak trzymać!",
       cert_title: "CERTYFIKAT",
       cert_sub: "Akademia CANDLE — ukończenie kursu",
@@ -1086,6 +1098,8 @@
           ? { f1: 523.25, f2: 783.99, dur: 0.18 }
           : kind === "bad"
           ? { f1: 311.13, f2: 196.0, dur: 0.22 }
+          : kind === "tick"
+          ? { f1: 880, f2: 870, dur: 0.05 }
           : { f1: 659.25, f2: 987.77, dur: 0.3 };
       o.frequency.setValueAtTime(cfg.f1, now);
       o.frequency.exponentialRampToValueAtTime(cfg.f2, now + cfg.dur);
@@ -1852,6 +1866,7 @@
     dom.timer.hidden = false;
     const total = blitzSeconds() * 1000;
     blitzTimer.end = performance.now() + total;
+    let lastSec = null;
     const tick = () => {
       const left = blitzTimer.end - performance.now();
       if (left <= 0) {
@@ -1864,7 +1879,12 @@
       const pct = (left / total) * 100;
       dom.timerFill.style.width = pct.toFixed(1) + "%";
       dom.timerFill.classList.toggle("low", pct < 30);
-      dom.timerSecs.textContent = String(Math.ceil(left / 1000));
+      const sec = Math.ceil(left / 1000);
+      if (sec !== lastSec) {
+        lastSec = sec;
+        if (sec <= 3) Sound.play("tick"); // audible countdown under pressure
+      }
+      dom.timerSecs.textContent = String(sec);
     };
     tick();
     blitzTimer.id = window.setInterval(tick, 100);
@@ -2217,7 +2237,12 @@
     if (game.mode === "daily") dom.date.textContent = formatDate(new Date());
     else if (game.mode === "survival")
       dom.date.textContent = t("sur_sub") + ` · ${t("mini_best")}: ${survival.best[surFlavor()] || 0}`;
-    else dom.date.textContent = game.real ? t("practice_sub_real") : t("practice_sub");
+    else
+      dom.date.textContent = game.challenge
+        ? t("challenge_sub")
+        : game.real
+        ? t("practice_sub_real")
+        : t("practice_sub");
   }
 
   function leaveAcademyList() {
@@ -2260,7 +2285,7 @@
     }
   }
 
-  function buildPracticeGame(series, real) {
+  function buildPracticeGame(series, real, seed, isChallenge) {
     game = {
       mode: "practice",
       hard: prefs.hard,
@@ -2276,6 +2301,8 @@
       readsByKey: {},
       lives: 0,
       real: real || null,
+      seed: seed || null,
+      challenge: !!isChallenge,
     };
     lastAnalysis = null;
     hardReads = {};
@@ -2286,10 +2313,15 @@
     announce(t("ann_practice"));
   }
 
-  function startPractice() {
+  function startPractice(forcedSeed) {
     stopTimer();
     leaveAcademyList();
     practiceCounter += 1;
+    if (forcedSeed) {
+      // challenge link: identical chart for both players
+      buildPracticeGame(generateSeries(forcedSeed, GEN_TOTAL), null, forcedSeed, true);
+      return;
+    }
     const seedStr = "candle-practice-" + practiceCounter + "-" + Math.floor(performance.now());
     if (prefs.real) {
       // real history: fetch asynchronously, fall back to the simulator
@@ -2306,7 +2338,7 @@
         });
       return;
     }
-    buildPracticeGame(generateSeries(seedStr, GEN_TOTAL), null);
+    buildPracticeGame(generateSeries(seedStr, GEN_TOTAL), null, seedStr, false);
   }
 
   /* ---------------- Real market data (free public API, no key) ---------------- */
@@ -2495,6 +2527,7 @@
 
     Sound.play(correct ? "good" : "bad");
     if (isTimeout) {
+      buzz([60, 40, 60]);
       dom.feedback.textContent = t("fb_timeout");
       dom.feedback.className = "feedback bad";
       announce(t("fb_timeout"));
@@ -2540,7 +2573,16 @@
     resolveRound(false, true);
   }
 
+  function buzz(pattern) {
+    try {
+      if (navigator.vibrate) navigator.vibrate(pattern);
+    } catch {
+      /* ignore */
+    }
+  }
+
   function flashFeedback(correct, wasBull) {
+    buzz(correct ? 30 : [60, 40, 60]);
     const word = t(wasBull ? "w_green" : "w_red");
     dom.feedback.textContent = t(correct ? "fb_correct" : "fb_wrong", { word });
     dom.feedback.className = "feedback " + (correct ? "good" : "bad");
@@ -2898,6 +2940,15 @@
       dom.btnPracticeRes.textContent =
         game.missionPassed && idx + 1 < MISSIONS.length ? t("mis_next") : t("res_again");
     } else dom.btnPracticeRes.textContent = t("res_practice");
+
+    // challenge a friend (synthetic practice charts only — they replay from the seed)
+    const chBtn = $("#btn-challenge");
+    if (game.mode === "practice" && game.seed && !game.real) {
+      chBtn.textContent = t("challenge_btn");
+      chBtn.hidden = false;
+    } else {
+      chBtn.hidden = true;
+    }
 
     // cross-sell the other daily variant (normal <-> HARD)
     const otherBtn = $("#btn-other-daily");
@@ -3360,6 +3411,18 @@
       slots++;
     }
     wrap.appendChild(col);
+
+    // colour legend
+    const legend = $("#heat-legend");
+    legend.innerHTML = "";
+    for (const [cls, label] of [["", t("heat_none")], ["l1", "0–1"], ["l0", "2–3"], ["w0", "4–5"], ["w1", "6"]]) {
+      const span = document.createElement("span");
+      const sw = document.createElement("div");
+      sw.className = "heat-cell" + (cls ? " " + cls : "");
+      span.appendChild(sw);
+      span.appendChild(document.createTextNode(label));
+      legend.appendChild(span);
+    }
   }
 
   function renderIndAcc(st) {
@@ -3687,6 +3750,21 @@
 
     $("#btn-share").addEventListener("click", doShare);
     $("#btn-share-img").addEventListener("click", doShareImage);
+    $("#btn-challenge").addEventListener("click", async () => {
+      if (!game || !game.seed) return;
+      const link = `${shareUrl()}?c=${encodeURIComponent(game.seed)}`;
+      const text = `${t("challenge_text", { s: score() })}\n${link}`;
+      if (navigator.share) {
+        try {
+          await navigator.share({ text });
+          return;
+        } catch {
+          /* cancelled */
+        }
+      }
+      const ok = await copyToClipboard(text);
+      flashBtn($("#btn-challenge"), ok ? "share_copied" : "share_failed");
+    });
     $("#btn-other-daily").addEventListener("click", () => {
       prefs.hard = !prefs.hard;
       savePrefs();
@@ -3747,12 +3825,30 @@
     });
   }
 
-  /* ---------------- Service worker ---------------- */
+  /* ---------------- Service worker + update toast ---------------- */
+  function showUpdateToast() {
+    const toast = $("#update-toast");
+    if (toast) toast.hidden = false;
+  }
   function registerSW() {
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost") return;
+    $("#btn-update").addEventListener("click", () => location.reload());
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("sw.js").catch(() => {});
+      navigator.serviceWorker
+        .register("sw.js")
+        .then((reg) => {
+          // a fresh version finished installing while an old one controls the page
+          if (reg.waiting && navigator.serviceWorker.controller) showUpdateToast();
+          reg.addEventListener("updatefound", () => {
+            const nw = reg.installing;
+            if (!nw) return;
+            nw.addEventListener("statechange", () => {
+              if (nw.state === "installed" && navigator.serviceWorker.controller) showUpdateToast();
+            });
+          });
+        })
+        .catch(() => {});
     });
   }
 
@@ -3765,7 +3861,17 @@
     backfillHistory();
     const ver = $("#app-version");
     if (ver) ver.textContent = APP_VERSION;
-    startDaily();
+
+    // challenge link? (?c=<seed>) — start the friend's exact chart
+    let challengeSeed = null;
+    try {
+      const c = new URLSearchParams(location.search).get("c");
+      if (c && /^[\w.\-]{1,80}$/.test(c)) challengeSeed = c;
+    } catch {
+      /* ignore */
+    }
+    if (challengeSeed) startPractice(challengeSeed);
+    else startDaily();
 
     if (!prefs.seenHelp) {
       prefs.seenHelp = true;
