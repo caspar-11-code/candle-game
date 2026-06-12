@@ -10,7 +10,7 @@
 "use strict";
 
 (function () {
-  const APP_VERSION = "v7";
+  const APP_VERSION = "v8";
 
   /* ---------------- Config ---------------- */
   const CONFIG = {
@@ -1243,6 +1243,8 @@
   }
   function displayedInds() {
     const act = activeIndSet();
+    // Academy missions must always show their tools, regardless of chip toggles
+    if (game && game.mode === "academy") return act;
     return new Set(ALL_INDS.filter((k) => act.has(k) && prefs.indOn[k]));
   }
   function readKeys() {
@@ -2192,8 +2194,21 @@
     academyListOpen = false;
     dom.academyList.hidden = true;
     setGameAreaHidden(false);
-    const seedStr = "candle-academy-" + m.id + "-" + Math.floor(performance.now());
-    const series = generateSeries(seedStr, GEN_TOTAL);
+    // for the Fibonacci mission make sure the starting window actually has
+    // a meaningful swing, so the levels are visible from round one
+    let series = null;
+    for (let tryN = 0; tryN < 25; tryN++) {
+      const seedStr = "candle-academy-" + m.id + "-" + Math.floor(performance.now()) + "-" + tryN;
+      const s = generateSeries(seedStr, GEN_TOTAL);
+      if (m.inds.includes("fib")) {
+        const atrProbe = atrArr(s, 14);
+        const iLast = VIS_START + CONFIG.HISTORY - 1;
+        if (!computeFib(s, VIS_START, iLast, atrProbe[iLast])) continue;
+      }
+      series = s;
+      break;
+    }
+    if (!series) series = generateSeries("candle-academy-fallback-" + Math.floor(performance.now()), GEN_TOTAL);
     game = {
       mode: "academy",
       hard: false,
