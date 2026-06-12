@@ -39,12 +39,27 @@
   // indicator -> index in the LESSONS bank (for the "weakest read" hint)
   const LESSON_FOR_KEY = { ma: 9, vol: 4, rsi: 6, macd: 10, sr: 7, bb: 15, stoch: 16, fib: 17 };
 
+  // Academy missions — one tool at a time, finished with an exam
+  const MISSIONS = [
+    { id: "m1", inds: [], pass: 3, icon: "🕯️" },
+    { id: "m2", inds: ["ma"], pass: 4, icon: "📈" },
+    { id: "m3", inds: ["ma", "vol"], pass: 4, icon: "📊" },
+    { id: "m4", inds: ["rsi"], pass: 4, icon: "🌡️" },
+    { id: "m5", inds: ["macd"], pass: 4, icon: "🚂" },
+    { id: "m6", inds: ["sr"], pass: 4, icon: "🧱" },
+    { id: "m7", inds: ["bb"], pass: 4, icon: "🎈" },
+    { id: "m8", inds: ["stoch"], pass: 4, icon: "🎢" },
+    { id: "m9", inds: ["fib"], pass: 4, icon: "🌀" },
+    { id: "m10", inds: ["ma", "vol", "rsi", "macd", "sr", "bb", "stoch", "fib"], pass: 5, icon: "🎓" },
+  ];
+
   const KEYS = {
     stats: "candle.stats.v1",
     statsHard: "candle.stats.hard.v1",
     prefs: "candle.prefs.v1",
     survival: "candle.survival.v1",
     badges: "candle.badges.v1",
+    academy: "candle.academy.v1",
     daily: (n, hard) => `candle.daily${hard ? ".hard" : ""}.v2.${n}`,
   };
 
@@ -209,6 +224,41 @@
       eq_stake: "Stake 100 per round:",
       eq_you: "You",
       eq_hold: "Buy & hold",
+      tab_academy: "Academy",
+      academy_title: "Academy — one tool at a time",
+      academy_progress: "{a}/{b} missions",
+      mis_back: "← missions",
+      mis_goal: "Goal: {n}+/6",
+      mis_passed: "Mission passed! ✅",
+      mis_failed: "Not this time — read the brief and try again.",
+      mis_next: "Next mission →",
+      b_grad_n: "Graduate",
+      b_grad_d: "Complete all Academy missions",
+      m1_t: "Candles 101",
+      m1_b: "No indicators — just bodies and wicks. A big body = conviction, a long wick = rejection of that price. Three same-colour candles in a row carry momentum.",
+      m2_t: "Moving averages",
+      m2_b: "EMA9 (blue) above SMA20 (orange) with price above both = uptrend — and continuation is more common than reversal. Trade with the slope, not against it.",
+      m3_t: "Volume",
+      m3_b: "Volume is the lie detector: impulses on tall bars deserve trust, moves on thin volume fade easily. Watch bars vs the dotted average line.",
+      m4_t: "RSI",
+      m4_b: "Above 70 = stretched, below 30 = washed out, 55–70 = healthy bullish momentum. Think in zones, not single values.",
+      m5_t: "MACD",
+      m5_b: "Watch the histogram: growing = the move accelerates, shrinking = it runs out of fuel — often before price turns.",
+      m6_t: "Support & resistance",
+      m6_b: "Price near a dashed level usually reacts. Bounces are more common than breaks — but a clean break tends to keep going.",
+      m7_t: "Bollinger Bands",
+      m7_b: "A close outside the bands is a stretched rubber band — snap-backs are common. A tight squeeze means a breakout is loading.",
+      m8_t: "Stochastic",
+      m8_b: "Extremes above 80 / below 20 plus %K crossing %D. It shines in ranging markets — in strong trends it pins to the extreme.",
+      m9_t: "Fibonacci",
+      m9_b: "Retracements of the last big swing: 0.382 / 0.5 / 0.618 are classic floors and ceilings where reactions happen.",
+      m10_t: "Final exam",
+      m10_b: "Full toolkit, no excuses. Prove you can read the market: 5 out of 6.",
+      real_btn: "Real market",
+      real_loading: "Fetching a real chart…",
+      real_fail: "Live data unavailable — using the simulator.",
+      real_reveal: "🌍 That was {sym} · {from} → {to}",
+      practice_sub_real: "Real, anonymized market history — revealed after the round",
       help_title: "How to play",
       footer_note:
         "Skill, not luck — but the market always gets the last word. Scores stay on your device. Not financial advice.",
@@ -398,6 +448,41 @@
       eq_stake: "Stawka 100 na rundę:",
       eq_you: "Ty",
       eq_hold: "Kup i trzymaj",
+      tab_academy: "Akademia",
+      academy_title: "Akademia — jedno narzędzie na raz",
+      academy_progress: "{a}/{b} misji",
+      mis_back: "← misje",
+      mis_goal: "Cel: {n}+/6",
+      mis_passed: "Misja zaliczona! ✅",
+      mis_failed: "Nie tym razem — przeczytaj brief i spróbuj ponownie.",
+      mis_next: "Następna misja →",
+      b_grad_n: "Absolwent",
+      b_grad_d: "Ukończ wszystkie misje Akademii",
+      m1_t: "Świece 101",
+      m1_b: "Bez wskaźników — tylko korpusy i knoty. Duży korpus = przekonanie, długi knot = odrzucenie ceny. Trzy świece tego samego koloru z rzędu niosą momentum.",
+      m2_t: "Średnie kroczące",
+      m2_b: "EMA9 (niebieska) nad SMA20 (pomarańczową) i cena nad obiema = trend wzrostowy — a kontynuacja jest częstsza niż odwrócenie. Graj z nachyleniem, nie pod prąd.",
+      m3_t: "Wolumen",
+      m3_b: "Wolumen to wykrywacz kłamstw: impulsy na wysokich słupkach zasługują na zaufanie, ruchy na cienkim wolumenie łatwo gasną. Porównuj słupki z kropkowaną średnią.",
+      m4_t: "RSI",
+      m4_b: "Powyżej 70 = rozciągnięty, poniżej 30 = wyprzedany, 55–70 = zdrowe bycze momentum. Myśl strefami, nie pojedynczymi wartościami.",
+      m5_t: "MACD",
+      m5_b: "Patrz na histogram: rośnie = ruch przyspiesza, maleje = kończy mu się paliwo — często zanim zawróci cena.",
+      m6_t: "Wsparcia i opory",
+      m6_b: "Cena przy przerywanym poziomie zwykle reaguje. Odbicia są częstsze niż wybicia — ale czyste wybicie zwykle kontynuuje ruch.",
+      m7_t: "Wstęgi Bollingera",
+      m7_b: "Zamknięcie poza wstęgą to naciągnięta guma — powroty są częste. Mocne ściśnięcie wstęg = ładuje się wybicie.",
+      m8_t: "Stochastic",
+      m8_b: "Ekstrema powyżej 80 / poniżej 20 plus przecięcia %K z %D. Błyszczy w konsolidacji — w silnym trendzie wisi przy ekstremum.",
+      m9_t: "Fibonacci",
+      m9_b: "Zniesienia ostatniej dużej fali: 0.382 / 0.5 / 0.618 to klasyczne podłogi i sufity, przy których rynek reaguje.",
+      m10_t: "Egzamin maklerski",
+      m10_b: "Pełny zestaw narzędzi, zero wymówek. Udowodnij, że czytasz rynek: 5 z 6.",
+      real_btn: "Prawdziwy rynek",
+      real_loading: "Pobieram prawdziwy wykres…",
+      real_fail: "Dane na żywo niedostępne — używam symulatora.",
+      real_reveal: "🌍 To był {sym} · {from} → {to}",
+      practice_sub_real: "Prawdziwa, anonimowa historia rynku — odkryje się po rundzie",
       help_title: "Jak grać",
       footer_note:
         "Umiejętności, nie szczęście — ale ostatnie słowo zawsze należy do rynku. Wyniki zostają na Twoim urządzeniu. To nie jest porada inwestycyjna.",
@@ -497,6 +582,7 @@
     { id: "survivor", icon: "🏃" },
     { id: "scholar", icon: "🎓" },
     { id: "blitz", icon: "⚡" },
+    { id: "grad", icon: "🎖️" },
   ];
 
   /* ---------------- Tiny utilities ---------------- */
@@ -916,6 +1002,7 @@
       practiceLevel: 1,
       hard: false,
       blitz: false,
+      real: false,
       indOn: { ma: true, vol: true, rsi: true, macd: true, sr: true, bb: true, stoch: true, fib: true },
     };
   }
@@ -929,6 +1016,7 @@
     d.practiceLevel = clampInt(raw.practiceLevel, 1, LEVELS.length) || 1;
     d.hard = raw.hard === true;
     d.blitz = raw.blitz === true;
+    d.real = raw.real === true;
     if (raw.indOn && typeof raw.indOn === "object") {
       for (const k of ALL_INDS) d.indOn[k] = raw.indOn[k] !== false;
     }
@@ -982,6 +1070,15 @@
   };
   let survival = normalizeSurvival(Store.get(KEYS.survival, null));
   let badgeStore = normalizeBadgeStore(Store.get(KEYS.badges, null));
+  let academy = (function () {
+    const raw = Store.get(KEYS.academy, null);
+    const d = { done: [] };
+    if (raw && Array.isArray(raw.done)) {
+      d.done = raw.done.filter((id) => MISSIONS.some((m) => m.id === id));
+    }
+    return d;
+  })();
+  let academyListOpen = false;
 
   let game = null;
   let lastAnalysis = null;
@@ -1037,11 +1134,19 @@
     tabDaily: $("#tab-daily"),
     tabPractice: $("#tab-practice"),
     tabSurvival: $("#tab-survival"),
+    tabAcademy: $("#tab-academy"),
     levelbar: $("#levelbar"),
     indbar: $("#indbar"),
     btnHard: $("#btn-hard"),
     btnBlitz: $("#btn-blitz"),
+    btnReal: $("#btn-real"),
     btnNewChart: $("#btn-newchart"),
+    academyList: $("#academy-list"),
+    missionBrief: $("#mission-brief"),
+    mbTitle: $("#mb-title"),
+    mbGoal: $("#mb-goal"),
+    mbTip: $("#mb-tip"),
+    realReveal: $("#real-reveal"),
     timer: $("#blitz-timer"),
     timerFill: $("#bt-fill"),
     timerSecs: $("#bt-secs"),
@@ -1080,8 +1185,12 @@
 
   /* ---------------- Indicator visibility ---------------- */
   function activeIndSet() {
+    if (game && game.mode === "academy") return new Set(game.mission.inds);
     if (!game || game.mode !== "practice") return new Set(ALL_INDS);
     return new Set(LEVELS[prefs.practiceLevel - 1].inds);
+  }
+  function hardActive() {
+    return prefs.hard && game && game.mode !== "academy";
   }
   function displayedInds() {
     const act = activeIndSet();
@@ -1438,7 +1547,7 @@
   }
 
   function renderCharts() {
-    if (!game) return;
+    if (!game || academyListOpen) return;
     const shown = displayedInds();
     dom.rsiWrap.hidden = !shown.has("rsi");
     dom.macdWrap.hidden = !shown.has("macd");
@@ -1622,7 +1731,7 @@
   }
 
   function renderReads() {
-    const show = prefs.hard && game && !game.finished && readKeys().length > 0;
+    const show = hardActive() && !game.finished && readKeys().length > 0;
     dom.reads.hidden = !show;
     if (!show) return;
     dom.readsList.innerHTML = "";
@@ -1664,7 +1773,7 @@
 
   function updateCallGate() {
     if (!game || game.finished) return;
-    const gateOpen = !prefs.hard || readsComplete() || readKeys().length === 0;
+    const gateOpen = !hardActive() || readsComplete() || readKeys().length === 0;
     dom.bull.disabled = busy || !gateOpen;
     dom.bear.disabled = busy || !gateOpen;
   }
@@ -1674,7 +1783,7 @@
     return prefs.hard ? CONFIG.BLITZ_S_HARD : CONFIG.BLITZ_S;
   }
   function blitzActive() {
-    return prefs.blitz && game && game.mode !== "daily" && !game.finished;
+    return prefs.blitz && game && (game.mode === "practice" || game.mode === "survival") && !game.finished;
   }
   function stopTimer() {
     if (blitzTimer.id) {
@@ -1836,15 +1945,19 @@
 
   /* ---------------- Mode bars ---------------- */
   function renderModeBars() {
-    const mode = game ? game.mode : "daily";
+    const mode = academyListOpen ? "academy" : game ? game.mode : "daily";
     dom.tabDaily.setAttribute("aria-selected", String(mode === "daily"));
     dom.tabPractice.setAttribute("aria-selected", String(mode === "practice"));
     dom.tabSurvival.setAttribute("aria-selected", String(mode === "survival"));
+    dom.tabAcademy.setAttribute("aria-selected", String(mode === "academy"));
     dom.levelbar.hidden = mode !== "practice";
-    dom.btnNewChart.hidden = mode === "daily";
-    dom.btnBlitz.hidden = mode === "daily";
+    dom.btnNewChart.hidden = mode === "daily" || mode === "academy";
+    dom.btnBlitz.hidden = mode === "daily" || mode === "academy";
+    dom.btnHard.hidden = mode === "academy";
+    dom.btnReal.hidden = mode !== "practice";
     dom.btnHard.setAttribute("aria-pressed", String(prefs.hard));
     dom.btnBlitz.setAttribute("aria-pressed", String(prefs.blitz));
+    dom.btnReal.setAttribute("aria-pressed", String(prefs.real));
     $$("#levelbar button").forEach((b) => {
       b.classList.toggle("is-active", Number(b.dataset.level) === prefs.practiceLevel);
     });
@@ -1854,10 +1967,152 @@
       b.hidden = !act.has(k);
       b.setAttribute("aria-pressed", String(prefs.indOn[k] !== false));
     });
-    dom.indbar.hidden = act.size === 0;
+    dom.indbar.hidden = act.size === 0 || mode === "academy";
+  }
+
+  /* ---------------- Academy ---------------- */
+  function missionIndex(m) {
+    return MISSIONS.findIndex((x) => x.id === m.id);
+  }
+  function missionUnlocked(idx) {
+    return idx === 0 || academy.done.includes(MISSIONS[idx - 1].id);
+  }
+  function saveAcademy() {
+    Store.set(KEYS.academy, academy);
+  }
+
+  function setGameAreaHidden(hide) {
+    const els = [
+      dom.chartWrap,
+      $("#question"),
+      $("#controls"),
+      $(".status"),
+      dom.analysis,
+      dom.reads,
+      dom.timer,
+    ];
+    for (const el of els) {
+      if (!el) continue;
+      if (hide) el.setAttribute("data-acad-hidden", "1");
+      else el.removeAttribute("data-acad-hidden");
+      el.style.display = hide ? "none" : "";
+    }
+    if (hide) {
+      dom.rsiWrap.hidden = true;
+      dom.macdWrap.hidden = true;
+      dom.stochWrap.hidden = true;
+      dom.missionBrief.hidden = true;
+    }
+  }
+
+  function renderAcademyList() {
+    const wrap = dom.academyList;
+    wrap.innerHTML = "";
+    const head = document.createElement("div");
+    head.className = "academy__head";
+    const ht = document.createElement("span");
+    ht.textContent = t("academy_title");
+    const hp = document.createElement("strong");
+    hp.textContent = t("academy_progress", { a: academy.done.length, b: MISSIONS.length });
+    head.appendChild(ht);
+    head.appendChild(hp);
+    wrap.appendChild(head);
+
+    MISSIONS.forEach((m, idx) => {
+      const done = academy.done.includes(m.id);
+      const unlocked = missionUnlocked(idx);
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "mission" + (done ? " done" : "");
+      card.disabled = !unlocked;
+
+      const icon = document.createElement("span");
+      icon.className = "m-icon";
+      icon.textContent = m.icon;
+
+      const body = document.createElement("span");
+      body.className = "m-name";
+      body.textContent = `${idx + 1}. ${t(m.id + "_t")}`;
+      const goal = document.createElement("span");
+      goal.className = "m-goal";
+      goal.textContent = t("mis_goal", { n: m.pass });
+      body.appendChild(goal);
+
+      const status = document.createElement("span");
+      status.className = "m-status";
+      status.textContent = done ? "✓" : unlocked ? "▶" : "🔒";
+
+      card.appendChild(icon);
+      card.appendChild(body);
+      card.appendChild(status);
+      if (unlocked) card.addEventListener("click", () => startMission(m));
+      wrap.appendChild(card);
+    });
+  }
+
+  function showAcademyList() {
+    stopTimer();
+    academyListOpen = true;
+    closeAllModals();
+    renderAcademyList();
+    dom.academyList.hidden = false;
+    setGameAreaHidden(true);
+    renderModeBars();
+    dom.modeWord.textContent = t("tab_academy");
+    dom.number.textContent = "";
+    dom.date.textContent = t("academy_progress", { a: academy.done.length, b: MISSIONS.length });
+  }
+
+  function renderMissionBrief() {
+    if (!game || game.mode !== "academy") {
+      dom.missionBrief.hidden = true;
+      return;
+    }
+    const m = game.mission;
+    dom.mbTitle.textContent = `${m.icon} ${t(m.id + "_t")}`;
+    dom.mbGoal.textContent = t("mis_goal", { n: m.pass });
+    dom.mbTip.textContent = t(m.id + "_b");
+    dom.missionBrief.hidden = false;
+  }
+
+  function startMission(m) {
+    stopTimer();
+    academyListOpen = false;
+    dom.academyList.hidden = true;
+    setGameAreaHidden(false);
+    const seedStr = "candle-academy-" + m.id + "-" + Math.floor(performance.now());
+    const series = generateSeries(seedStr, GEN_TOTAL);
+    game = {
+      mode: "academy",
+      hard: false,
+      blitz: false,
+      mission: m,
+      number: missionIndex(m) + 1,
+      series,
+      ind: computeIndicators(series),
+      round: 0,
+      results: [],
+      finished: false,
+      readsCorrect: 0,
+      readsTotal: 0,
+      readsByKey: {},
+      lives: 0,
+      missionPassed: false,
+    };
+    lastAnalysis = null;
+    hardReads = {};
+    updateMetaTitle();
+    refreshAll();
+    closeAllModals();
   }
 
   function updateMetaTitle() {
+    if (game.mode === "academy") {
+      dom.modeWord.innerHTML = t("tab_academy");
+      dom.number.textContent = "#M" + game.number;
+      dom.date.textContent = t(game.mission.id + "_t") + " · " + t("mis_goal", { n: game.mission.pass });
+      return;
+    }
     const base = t(
       game.mode === "daily" ? "tab_daily" : game.mode === "survival" ? "tab_survival" : "tab_practice"
     );
@@ -1869,12 +2124,19 @@
     if (game.mode === "daily") dom.date.textContent = formatDate(new Date());
     else if (game.mode === "survival")
       dom.date.textContent = t("sur_sub") + ` · ${t("mini_best")}: ${survival.best[surFlavor()] || 0}`;
-    else dom.date.textContent = t("practice_sub");
+    else dom.date.textContent = game.real ? t("practice_sub_real") : t("practice_sub");
+  }
+
+  function leaveAcademyList() {
+    academyListOpen = false;
+    dom.academyList.hidden = true;
+    setGameAreaHidden(false);
   }
 
   /* ---------------- Core loop ---------------- */
   function startDaily() {
     stopTimer();
+    leaveAcademyList();
     const today = new Date();
     const number = puzzleNumberFor(today);
     const saved = Store.get(KEYS.daily(number, prefs.hard), null);
@@ -1904,11 +2166,7 @@
     }
   }
 
-  function startPractice() {
-    stopTimer();
-    practiceCounter += 1;
-    const seedStr = "candle-practice-" + practiceCounter + "-" + Math.floor(performance.now());
-    const series = generateSeries(seedStr, GEN_TOTAL);
+  function buildPracticeGame(series, real) {
     game = {
       mode: "practice",
       hard: prefs.hard,
@@ -1923,6 +2181,7 @@
       readsTotal: 0,
       readsByKey: {},
       lives: 0,
+      real: real || null,
     };
     lastAnalysis = null;
     hardReads = {};
@@ -1932,8 +2191,94 @@
     announce(t("ann_practice"));
   }
 
+  function startPractice() {
+    stopTimer();
+    leaveAcademyList();
+    practiceCounter += 1;
+    const seedStr = "candle-practice-" + practiceCounter + "-" + Math.floor(performance.now());
+    if (prefs.real) {
+      // real history: fetch asynchronously, fall back to the simulator
+      closeAllModals();
+      setControls(false);
+      dom.feedback.textContent = t("real_loading");
+      dom.feedback.className = "feedback";
+      fetchRealSeries()
+        .then(({ series, real }) => buildPracticeGame(series, real))
+        .catch(() => {
+          buildPracticeGame(generateSeries(seedStr, GEN_TOTAL), null);
+          dom.feedback.textContent = t("real_fail");
+          dom.feedback.className = "feedback bad";
+        });
+      return;
+    }
+    buildPracticeGame(generateSeries(seedStr, GEN_TOTAL), null);
+  }
+
+  /* ---------------- Real market data (free public API, no key) ---------------- */
+  async function fetchRealSeries() {
+    const sym = Math.random() < 0.5 ? "BTCUSDT" : "ETHUSDT";
+    const earliest = Date.UTC(2017, 8, 15);
+    const latest = Date.now() - (GEN_TOTAL + 5) * 86400000;
+    const start = Math.floor(earliest + Math.random() * (latest - earliest));
+    const qs = `symbol=${sym}&interval=1d&limit=${GEN_TOTAL}&startTime=${start}`;
+    const hosts = ["https://data-api.binance.vision", "https://api.binance.com"];
+    let rows = null;
+    for (const h of hosts) {
+      try {
+        const ctl = new AbortController();
+        const to = window.setTimeout(() => ctl.abort(), 6000);
+        const res = await fetch(`${h}/api/v3/klines?${qs}`, { signal: ctl.signal });
+        window.clearTimeout(to);
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (Array.isArray(data) && data.length === GEN_TOTAL) {
+          rows = data;
+          break;
+        }
+      } catch {
+        /* try next host */
+      }
+    }
+    if (!rows) throw new Error("no data");
+
+    // anonymize: rebase prices to 100 and volumes to ~85 average
+    const f = 100 / parseFloat(rows[0][4]);
+    let volSum = 0;
+    for (const r of rows) volSum += parseFloat(r[5]);
+    const vf = 85 / (volSum / rows.length || 1);
+    const series = rows.map((r) => {
+      const o = parseFloat(r[1]) * f,
+        h2 = parseFloat(r[2]) * f,
+        l = parseFloat(r[3]) * f,
+        c = parseFloat(r[4]) * f;
+      return {
+        open: o,
+        high: h2,
+        low: l,
+        close: c,
+        bull: c >= o,
+        volume: Math.max(5, Math.round(parseFloat(r[5]) * vf)),
+      };
+    });
+    const fmt = (ts) =>
+      new Date(ts).toLocaleDateString(prefs.lang === "pl" ? "pl-PL" : "en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    return {
+      series,
+      real: {
+        sym: sym === "BTCUSDT" ? "BTC/USDT" : "ETH/USDT",
+        from: fmt(rows[VIS_START][0]),
+        to: fmt(rows[rows.length - 1][6]),
+      },
+    };
+  }
+
   function startSurvival() {
     stopTimer();
+    leaveAcademyList();
     survivalCounter += 1;
     const seedStr = "candle-survival-" + survivalCounter + "-" + Math.floor(performance.now());
     const series = generateSeries(seedStr, SUR_TOTAL);
@@ -1962,6 +2307,7 @@
 
   function refreshAll() {
     renderModeBars();
+    renderMissionBrief();
     renderCharts();
     renderProgress();
     renderScore();
@@ -1987,7 +2333,7 @@
     const consensus = consensusOf(signals);
 
     let readsSnapshot = null;
-    if (!isTimeout && prefs.hard && readKeys().length > 0) {
+    if (!isTimeout && hardActive() && readKeys().length > 0) {
       readsSnapshot = Object.assign({}, hardReads);
       for (const sig of signals) {
         if (Object.prototype.hasOwnProperty.call(readsSnapshot, sig.key)) {
@@ -2053,7 +2399,7 @@
   function call(predictBull) {
     if (busy || !game || game.finished) return;
     if (!roundsLeft()) return;
-    if (prefs.hard && readKeys().length > 0 && !readsComplete()) {
+    if (hardActive() && readKeys().length > 0 && !readsComplete()) {
       dom.feedback.textContent = t("fb_tag_first");
       dom.feedback.className = "feedback bad";
       return;
@@ -2092,6 +2438,12 @@
       saveDaily();
     } else if (game.mode === "survival") {
       surNewRecord = recordSurvival();
+    } else if (game.mode === "academy") {
+      game.missionPassed = score() >= game.mission.pass;
+      if (game.missionPassed && !academy.done.includes(game.mission.id)) {
+        academy.done.push(game.mission.id);
+        saveAcademy();
+      }
     }
     if (game.mode === "practice" && !badgeStore.levelsDone.includes(prefs.practiceLevel)) {
       badgeStore.levelsDone.push(prefs.practiceLevel);
@@ -2206,6 +2558,7 @@
     if (stats.hard.passes >= 1) earnBadge("hard");
     if (anyBest >= 20) earnBadge("survivor");
     if ([1, 2, 3, 4, 5, 6].every((l) => badgeStore.levelsDone.includes(l))) earnBadge("scholar");
+    if (academy.done.length >= MISSIONS.length) earnBadge("grad");
     if (
       game &&
       game.mode === "daily" &&
@@ -2306,10 +2659,22 @@
         t("sur_over", { n: game.round }) + (surNewRecord ? " " + t("sur_new_record") : "");
       dom.resultScore.textContent = String(s);
       dom.resultGrid.textContent = `🟩×${s}  🟥×${CONFIG.SUR_LIVES - game.lives}`;
+    } else if (game.mode === "academy") {
+      dom.resultHeadline.textContent = game.missionPassed ? t("mis_passed") : t("mis_failed");
+      dom.resultScore.textContent = `${s} / ${CONFIG.ROUNDS}`;
+      dom.resultGrid.textContent = game.results.map((r) => (r ? "🟩" : "🟥")).join("");
     } else {
       dom.resultHeadline.textContent = t("headline_" + s);
       dom.resultScore.textContent = `${s} / ${CONFIG.ROUNDS}`;
       dom.resultGrid.textContent = game.results.map((r) => (r ? "🟩" : "🟥")).join("");
+    }
+
+    // real-market reveal
+    if (game.real && game.finished) {
+      dom.realReveal.textContent = t("real_reveal", { sym: game.real.sym, from: game.real.from, to: game.real.to });
+      dom.realReveal.hidden = false;
+    } else {
+      dom.realReveal.hidden = true;
     }
 
     dom.resultMini.innerHTML = "";
@@ -2326,6 +2691,11 @@
         [t("mini_rounds"), game.round],
         [t("mini_hits"), s],
         [t("mini_best"), survival.best[surFlavor()] || 0],
+      ];
+    } else if (game.mode === "academy") {
+      minis = [
+        [t("mini_mode"), t(game.mission.id + "_t")],
+        [t("mini_best"), t("academy_progress", { a: academy.done.length, b: MISSIONS.length })],
       ];
     } else {
       minis = [[t("mini_mode"), t("mini_practice")]];
@@ -2365,7 +2735,12 @@
       dom.lesson.hidden = true;
     }
 
-    dom.btnPracticeRes.textContent = game.mode === "survival" ? t("res_again") : t("res_practice");
+    if (game.mode === "survival") dom.btnPracticeRes.textContent = t("res_again");
+    else if (game.mode === "academy") {
+      const idx = missionIndex(game.mission);
+      dom.btnPracticeRes.textContent =
+        game.missionPassed && idx + 1 < MISSIONS.length ? t("mis_next") : t("res_again");
+    } else dom.btnPracticeRes.textContent = t("res_practice");
     dom.sharePreview.hidden = true;
 
     startCountdown();
@@ -2383,6 +2758,8 @@
     const blitz = game.blitz ? " ⚡" : "";
     if (game.mode === "daily") return `CANDLE${hard} #${game.number}`;
     if (game.mode === "survival") return `CANDLE SURVIVAL${hard}${blitz}`;
+    if (game.mode === "academy") return `CANDLE ACADEMY M${game.number}`;
+    if (game.real) return `CANDLE${hard}${blitz} 🌍 ${game.real.sym}`;
     return `CANDLE${hard}${blitz} practice·L${prefs.practiceLevel}`;
   }
   function shareText() {
@@ -2514,7 +2891,15 @@
     ctx.font = "600 36px ui-monospace, Consolas, monospace";
     ctx.textAlign = "right";
     ctx.fillText(
-      game.mode === "daily" ? `#${game.number}` : game.mode === "survival" ? "SURVIVAL" : `practice L${prefs.practiceLevel}`,
+      game.mode === "daily"
+        ? `#${game.number}`
+        : game.mode === "survival"
+        ? "SURVIVAL"
+        : game.mode === "academy"
+        ? `ACADEMY M${game.number}`
+        : game.real
+        ? `REAL · ${game.real.sym.split("/")[0]}`
+        : `practice L${prefs.practiceLevel}`,
       W - 64,
       104
     );
@@ -2977,12 +3362,19 @@
       startPractice();
     });
     dom.tabSurvival.addEventListener("click", () => {
-      if (game && game.mode === "survival" && !game.finished) return;
+      if (!academyListOpen && game && game.mode === "survival" && !game.finished) return;
       startSurvival();
     });
+    dom.tabAcademy.addEventListener("click", () => showAcademyList());
+    $("#mb-back").addEventListener("click", () => showAcademyList());
     dom.btnNewChart.addEventListener("click", () => {
       if (game && game.mode === "survival") startSurvival();
       else startPractice();
+    });
+    dom.btnReal.addEventListener("click", () => {
+      prefs.real = !prefs.real;
+      savePrefs();
+      startPractice();
     });
 
     dom.btnHard.addEventListener("click", () => {
@@ -3065,7 +3457,11 @@
     $("#btn-share-img").addEventListener("click", doShareImage);
     dom.btnPracticeRes.addEventListener("click", () => {
       if (game && game.mode === "survival") startSurvival();
-      else startPractice();
+      else if (game && game.mode === "academy") {
+        const idx = missionIndex(game.mission);
+        if (game.missionPassed && idx + 1 < MISSIONS.length) startMission(MISSIONS[idx + 1]);
+        else startMission(game.mission);
+      } else startPractice();
     });
 
     document.addEventListener("keydown", (e) => {

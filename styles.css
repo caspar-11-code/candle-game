@@ -689,8 +689,92 @@ body::before {
 .bt-fill.low { background: var(--bear); }
 .bt-secs { font-family: var(--ff-mono); font-weight: 800; color: var(--text-dim); min-width: 2ch; text-align: right; }
 
-.sur-lives { list-style: none; font-size: 0.95rem; letter-spacing: 2px; white-space: nowrap; }
-.sur-lives .sur-round { color: var(--text-dim); font-family: var(--ff-mono); font-weight: 700; margin-left: 8px; }
+/* hearts row must override the 13px progress-dot styling */
+.progress li.sur-lives {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  transform: none;
+  list-style: none;
+  font-size: 0.95rem;
+  letter-spacing: 2px;
+  white-space: nowrap;
+  line-height: 1;
+}
+.sur-lives .sur-round { color: var(--text-dim); font-family: var(--ff-mono); font-weight: 700; margin-left: 8px; letter-spacing: 0; }
+
+/* academy */
+.academy { display: flex; flex-direction: column; gap: 8px; }
+.academy__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-dim);
+  font-size: 0.84rem;
+  padding: 2px 2px 4px;
+}
+.academy__head strong { font-family: var(--ff-mono); color: var(--text); }
+.mission {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+  padding: 12px 14px;
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color .15s ease, transform .12s ease;
+}
+.mission:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-1px); }
+.mission:disabled { opacity: 0.45; cursor: not-allowed; }
+.mission.done { border-color: var(--bull); }
+.mission .m-icon { font-size: 1.4rem; text-align: center; }
+.mission .m-name { font-weight: 700; font-size: 0.92rem; }
+.mission .m-goal { display: block; font-weight: 400; font-size: 0.76rem; color: var(--text-faint); margin-top: 2px; }
+.mission .m-status { font-size: 1.1rem; }
+.mission.done .m-status { color: var(--bull); }
+
+.mission-brief {
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 10px 14px;
+}
+.mission-brief h3 { margin: 0 0 4px; font-size: 0.92rem; }
+.mission-brief h3 .mb-back {
+  float: right;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-family: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.mission-brief .mb-goal { margin: 0 0 4px; font-size: 0.76rem; color: var(--accent); font-weight: 700; }
+.mission-brief .mb-tip { margin: 0; font-size: 0.82rem; color: var(--text-dim); line-height: 1.45; }
+
+/* real market toggle + reveal */
+.real-toggle[aria-pressed="true"] {
+  color: #fff;
+  border-color: var(--bull);
+  background: var(--bull-dim);
+}
+.real-reveal {
+  margin: 0 0 10px;
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ma-slow);
+}
 
 /* equity curve */
 .equity {
