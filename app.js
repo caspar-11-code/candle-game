@@ -41,6 +41,21 @@
   // indicator -> index in the LESSONS bank (for the "weakest read" hint)
   const LESSON_FOR_KEY = { ma: 9, vol: 4, rsi: 6, macd: 10, sr: 7, bb: 15, stoch: 16, fib: 17 };
 
+  // Real-market data sources (free public endpoints, no key)
+  const REAL_SYMBOLS = [
+    ["BTCUSDT", "BTC/USDT", "Bitcoin", Date.UTC(2017, 8, 15)],
+    ["ETHUSDT", "ETH/USDT", "Ethereum", Date.UTC(2017, 8, 15)],
+    ["BNBUSDT", "BNB/USDT", "BNB", Date.UTC(2017, 10, 15)],
+    ["XRPUSDT", "XRP/USDT", "XRP", Date.UTC(2018, 5, 1)],
+    ["DOGEUSDT", "DOGE/USDT", "Dogecoin", Date.UTC(2019, 7, 1)],
+    ["SOLUSDT", "SOL/USDT", "Solana", Date.UTC(2020, 8, 1)],
+  ];
+  const REAL_INTERVALS = [
+    ["1d", "1D", 86400000],
+    ["4h", "4H", 14400000],
+    ["1h", "1H", 3600000],
+  ];
+
   // Academy missions — one tool at a time, finished with an exam
   const MISSIONS = [
     { id: "m1", inds: [], pass: 3, icon: "🕯️" },
@@ -263,6 +278,12 @@
       real_fail: "Live data unavailable — using the simulator.",
       real_reveal: "🌍 That was {sym} · {from} → {to}",
       practice_sub_real: "Real, anonymized market history — revealed after the round",
+      freeze_used: "🧊 Streak shield used — your streak survived the missed day!",
+      sur_milestone: "🎉 {n} hits — keep going!",
+      cert_title: "CERTIFICATE",
+      cert_sub: "CANDLE Academy — course completion",
+      cert_missions: "all 10 missions completed",
+      cert_btn: "🎖️ Download certificate",
       help_title: "How to play",
       footer_note:
         "Skill, not luck — but the market always gets the last word. Scores stay on your device. Not financial advice.",
@@ -489,6 +510,12 @@
       real_fail: "Dane na żywo niedostępne — używam symulatora.",
       real_reveal: "🌍 To był {sym} · {from} → {to}",
       practice_sub_real: "Prawdziwa, anonimowa historia rynku — odkryje się po rundzie",
+      freeze_used: "🧊 Tarcza serii zużyta — Twoja seria przetrwała opuszczony dzień!",
+      sur_milestone: "🎉 {n} trafień — tak trzymać!",
+      cert_title: "CERTYFIKAT",
+      cert_sub: "Akademia CANDLE — ukończenie kursu",
+      cert_missions: "ukończone wszystkie 10 misji",
+      cert_btn: "🎖️ Pobierz certyfikat",
       help_title: "Jak grać",
       footer_note:
         "Umiejętności, nie szczęście — ale ostatnie słowo zawsze należy do rynku. Wyniki zostają na Twoim urządzeniu. To nie jest porada inwestycyjna.",
@@ -938,6 +965,7 @@
       readsTotal: 0,
       readsByKey: {},
       history: {},
+      freezeUsedAt: null,
     };
   }
   function normalizeStats(raw) {
@@ -950,6 +978,7 @@
     d.currentStreak = clampInt(raw.currentStreak, 0, 1e9);
     d.maxStreak = clampInt(raw.maxStreak, 0, 1e9);
     d.lastNumber = raw.lastNumber == null ? null : clampInt(raw.lastNumber, -1e9, 1e9);
+    d.freezeUsedAt = raw.freezeUsedAt == null ? null : clampInt(raw.freezeUsedAt, 0, 1e9);
     if (Array.isArray(raw.dist) && raw.dist.length === 7) d.dist = raw.dist.map((x) => clampInt(x, 0, 1e9));
     d.readsCorrect = clampInt(raw.readsCorrect, 0, 1e12);
     d.readsTotal = clampInt(raw.readsTotal, 0, 1e12);
@@ -1993,7 +2022,7 @@
     dom.btnNewChart.hidden = mode === "daily" || mode === "academy";
     dom.btnBlitz.hidden = mode === "daily" || mode === "academy";
     dom.btnHard.hidden = mode === "academy";
-    dom.btnReal.hidden = mode !== "practice";
+    dom.btnReal.hidden = mode !== "practice" && mode !== "survival";
     dom.btnHard.setAttribute("aria-pressed", String(prefs.hard));
     dom.btnBlitz.setAttribute("aria-pressed", String(prefs.blitz));
     dom.btnReal.setAttribute("aria-pressed", String(prefs.real));
@@ -2056,6 +2085,29 @@
     head.appendChild(ht);
     head.appendChild(hp);
     wrap.appendChild(head);
+
+    // graduate? offer the certificate download
+    if (academy.done.length >= MISSIONS.length) {
+      const certBtn = document.createElement("button");
+      certBtn.type = "button";
+      certBtn.className = "btn btn--block btn--cta";
+      certBtn.textContent = t("cert_btn");
+      certBtn.addEventListener("click", () => {
+        const cv = buildCertCanvas();
+        cv.toBlob((blob) => {
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "candle-certificate.png";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.setTimeout(() => URL.revokeObjectURL(url), 5000);
+        }, "image/png");
+      });
+      wrap.appendChild(certBtn);
+    }
 
     MISSIONS.forEach((m, idx) => {
       const done = academy.done.includes(m.id);
@@ -2258,12 +2310,13 @@
   }
 
   /* ---------------- Real market data (free public API, no key) ---------------- */
-  async function fetchRealSeries() {
-    const sym = Math.random() < 0.5 ? "BTCUSDT" : "ETHUSDT";
-    const earliest = Date.UTC(2017, 8, 15);
-    const latest = Date.now() - (GEN_TOTAL + 5) * 86400000;
-    const start = Math.floor(earliest + Math.random() * (latest - earliest));
-    const qs = `symbol=${sym}&interval=1d&limit=${GEN_TOTAL}&startTime=${start}`;
+  async function fetchRealSeries(total) {
+    const N = total || GEN_TOTAL;
+    const [sym, symLabel, symName, earliest] = REAL_SYMBOLS[Math.floor(Math.random() * REAL_SYMBOLS.length)];
+    const [iv, tf, ivMs] = REAL_INTERVALS[Math.floor(Math.random() * REAL_INTERVALS.length)];
+    const latest = Date.now() - (N + 5) * ivMs;
+    const start = Math.floor(earliest + Math.random() * Math.max(1, latest - earliest));
+    const qs = `symbol=${sym}&interval=${iv}&limit=${N}&startTime=${start}`;
     const hosts = ["https://data-api.binance.vision", "https://api.binance.com"];
     let rows = null;
     for (const h of hosts) {
@@ -2274,7 +2327,7 @@
         window.clearTimeout(to);
         if (!res.ok) continue;
         const data = await res.json();
-        if (Array.isArray(data) && data.length === GEN_TOTAL) {
+        if (Array.isArray(data) && data.length === N) {
           rows = data;
           break;
         }
@@ -2309,22 +2362,21 @@
         month: "short",
         day: "numeric",
       });
+    const midTs = rows[Math.floor(rows.length / 2)][0];
+    const monthYear = new Date(midTs).toLocaleDateString("en-US", { month: "long", year: "numeric" });
     return {
       series,
       real: {
-        sym: sym === "BTCUSDT" ? "BTC/USDT" : "ETH/USDT",
+        sym: symLabel,
+        tf,
         from: fmt(rows[VIS_START][0]),
         to: fmt(rows[rows.length - 1][6]),
+        q: `${symName} ${monthYear} crypto market`,
       },
     };
   }
 
-  function startSurvival() {
-    stopTimer();
-    leaveAcademyList();
-    survivalCounter += 1;
-    const seedStr = "candle-survival-" + survivalCounter + "-" + Math.floor(performance.now());
-    const series = generateSeries(seedStr, SUR_TOTAL);
+  function buildSurvivalGame(series, real) {
     game = {
       mode: "survival",
       hard: prefs.hard,
@@ -2339,6 +2391,7 @@
       readsTotal: 0,
       readsByKey: {},
       lives: CONFIG.SUR_LIVES,
+      real: real || null,
     };
     lastAnalysis = null;
     hardReads = {};
@@ -2347,6 +2400,28 @@
     refreshAll();
     closeAllModals();
     announce(t("ann_survival"));
+  }
+
+  function startSurvival() {
+    stopTimer();
+    leaveAcademyList();
+    survivalCounter += 1;
+    const seedStr = "candle-survival-" + survivalCounter + "-" + Math.floor(performance.now());
+    if (prefs.real) {
+      closeAllModals();
+      setControls(false);
+      dom.feedback.textContent = t("real_loading");
+      dom.feedback.className = "feedback";
+      fetchRealSeries(SUR_TOTAL)
+        .then(({ series, real }) => buildSurvivalGame(series, real))
+        .catch(() => {
+          buildSurvivalGame(generateSeries(seedStr, SUR_TOTAL), null);
+          dom.feedback.textContent = t("real_fail");
+          dom.feedback.className = "feedback bad";
+        });
+      return;
+    }
+    buildSurvivalGame(generateSeries(seedStr, SUR_TOTAL), null);
   }
 
   function refreshAll() {
@@ -2425,6 +2500,13 @@
       announce(t("fb_timeout"));
     } else {
       flashFeedback(correct, target.bull);
+      // survival milestone every 10 hits
+      if (game.mode === "survival" && correct && score() > 0 && score() % 10 === 0) {
+        Sound.play("win");
+        dom.feedback.textContent = t("sur_milestone", { n: score() });
+        dom.feedback.className = "feedback good";
+        announce(dom.feedback.textContent);
+      }
     }
 
     window.setTimeout(() => {
@@ -2525,8 +2607,20 @@
     st.history[game.number] = s;
 
     if (pass) {
-      if (st.lastNumber === game.number - 1) st.currentStreak += 1;
-      else st.currentStreak = 1;
+      if (st.lastNumber === game.number - 1) {
+        st.currentStreak += 1;
+      } else if (
+        st.lastNumber === game.number - 2 &&
+        st.currentStreak > 0 &&
+        (st.freezeUsedAt == null || game.number - st.freezeUsedAt >= 30)
+      ) {
+        // streak shield: one skipped day forgiven, recharges every 30 days
+        st.currentStreak += 1;
+        st.freezeUsedAt = game.number;
+        game.freezeUsed = true;
+      } else {
+        st.currentStreak = 1;
+      }
     } else {
       st.currentStreak = 0;
     }
@@ -2714,9 +2808,22 @@
       dom.resultGrid.textContent = game.results.map((r) => (r ? "🟩" : "🟥")).join("");
     }
 
-    // real-market reveal
+    // real-market reveal (+ "what happened then" search link)
     if (game.real && game.finished) {
-      dom.realReveal.textContent = t("real_reveal", { sym: game.real.sym, from: game.real.from, to: game.real.to });
+      dom.realReveal.textContent = t("real_reveal", {
+        sym: game.real.sym + (game.real.tf ? " " + game.real.tf : ""),
+        from: game.real.from,
+        to: game.real.to,
+      });
+      if (game.real.q) {
+        const a = document.createElement("a");
+        a.href = "https://www.google.com/search?q=" + encodeURIComponent(game.real.q);
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = " 🔎";
+        a.title = game.real.q;
+        dom.realReveal.appendChild(a);
+      }
       dom.realReveal.hidden = false;
     } else {
       dom.realReveal.hidden = true;
@@ -2755,15 +2862,20 @@
       dom.resultMini.appendChild(div);
     }
 
-    // new badges
+    // new badges + streak shield notice
+    const notices = [];
+    if (game.freezeUsed) notices.push(t("freeze_used"));
     if (newBadgesQueue.length) {
       const names = newBadgesQueue.map((id) => {
         const b = BADGES.find((x) => x.id === id);
         return (b ? b.icon + " " : "") + t("b_" + id + "_n");
       });
-      dom.newBadges.textContent = `${t("new_badge")} ${names.join(", ")}`;
-      dom.newBadges.hidden = false;
+      notices.push(`${t("new_badge")} ${names.join(", ")}`);
       newBadgesQueue = [];
+    }
+    if (notices.length) {
+      dom.newBadges.textContent = notices.join(" · ");
+      dom.newBadges.hidden = false;
     } else {
       dom.newBadges.hidden = true;
     }
@@ -3083,16 +3195,76 @@
     return cv;
   }
 
+  /* ---------------- Academy certificate (canvas) ---------------- */
+  function buildCertCanvas() {
+    const W = 1080,
+      H = 1080;
+    const cv = document.createElement("canvas");
+    cv.width = W;
+    cv.height = H;
+    const ctx = cv.getContext("2d");
+
+    ctx.fillStyle = IMG.bg;
+    ctx.fillRect(0, 0, W, H);
+    const grad = ctx.createRadialGradient(W / 2, H / 2, 100, W / 2, H / 2, 760);
+    grad.addColorStop(0, "#16213a");
+    grad.addColorStop(1, IMG.bg);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // double frame
+    ctx.strokeStyle = "#f0a843";
+    ctx.lineWidth = 6;
+    rr(ctx, 50, 50, W - 100, H - 100, 28);
+    ctx.stroke();
+    ctx.lineWidth = 1.5;
+    rr(ctx, 70, 70, W - 140, H - 140, 20);
+    ctx.stroke();
+
+    ctx.textAlign = "center";
+    ctx.font = "120px serif";
+    ctx.fillText("🎖️", W / 2, 280);
+
+    ctx.fillStyle = "#f0a843";
+    ctx.font = "800 72px -apple-system, 'Segoe UI', Roboto, sans-serif";
+    ctx.fillText(t("cert_title"), W / 2, 400);
+
+    ctx.fillStyle = IMG.dim;
+    ctx.font = "600 36px -apple-system, 'Segoe UI', Roboto, sans-serif";
+    ctx.fillText(t("cert_sub"), W / 2, 460);
+
+    ctx.fillStyle = IMG.text;
+    ctx.font = "800 96px -apple-system, 'Segoe UI', Roboto, sans-serif";
+    ctx.fillText(t("b_grad_n").toUpperCase(), W / 2, 610);
+
+    ctx.fillStyle = IMG.bull;
+    ctx.font = "700 40px ui-monospace, Consolas, monospace";
+    ctx.fillText(t("cert_missions"), W / 2, 690);
+
+    ctx.fillStyle = IMG.dim;
+    ctx.font = "600 32px -apple-system, 'Segoe UI', Roboto, sans-serif";
+    ctx.fillText(formatDate(new Date()), W / 2, 790);
+
+    ctx.fillStyle = IMG.faint;
+    ctx.font = "600 30px ui-monospace, Consolas, monospace";
+    ctx.fillText("candles.gamestheory.org", W / 2, 960);
+
+    return cv;
+  }
+
   function doShareImage() {
     if (!game) return;
+    const certMode = game.mode === "academy" && game.mission && game.mission.id === "m10" && game.missionPassed;
     let cv;
     try {
-      cv = buildShareCanvas();
+      cv = certMode ? buildCertCanvas() : buildShareCanvas();
     } catch {
       flashBtn($("#btn-share-img"), "img_failed");
       return;
     }
-    const name = `candle-${game.mode === "daily" ? game.number : game.mode}${game.hard ? "-hard" : ""}.png`;
+    const name = certMode
+      ? "candle-certificate.png"
+      : `candle-${game.mode === "daily" ? game.number : game.mode}${game.hard ? "-hard" : ""}.png`;
     cv.toBlob(async (blob) => {
       if (!blob) {
         flashBtn($("#btn-share-img"), "img_failed");
@@ -3433,7 +3605,8 @@
     dom.btnReal.addEventListener("click", () => {
       prefs.real = !prefs.real;
       savePrefs();
-      startPractice();
+      if (game && game.mode === "survival") startSurvival();
+      else startPractice();
     });
 
     dom.btnHard.addEventListener("click", () => {
