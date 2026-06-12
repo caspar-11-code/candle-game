@@ -95,7 +95,9 @@
       word_down: "the downside (BEAR)",
       practice_sub: "Training — fresh chart, does not affect stats",
       sur_sub: "Survive as long as you can — 3 misses end the run",
-      reads_title: "HARD: tag your read on every indicator to unlock the call",
+      reads_title: "HARD: tag every indicator to unlock the call (keys: 1=▲ 2=• 3=▼)",
+      other_daily_hard: "Today's HARD daily awaits → play it",
+      other_daily_norm: "Today's normal daily awaits → play it",
       you_said: "You:",
       ind_name_ma: "Trend (MA)",
       ind_name_vol: "Volume",
@@ -319,7 +321,9 @@
       word_down: "spadków (BEAR)",
       practice_sub: "Trening — świeży wykres, nie wpływa na statystyki",
       sur_sub: "Przetrwaj jak najdłużej — 3 pomyłki kończą bieg",
-      reads_title: "HARD: oznacz swój odczyt każdego wskaźnika, aby odblokować typowanie",
+      reads_title: "HARD: oznacz każdy wskaźnik, aby odblokować typowanie (klawisze: 1=▲ 2=• 3=▼)",
+      other_daily_hard: "Dzisiejsza dzienna HARD czeka → zagraj",
+      other_daily_norm: "Dzisiejsza zwykła dzienna czeka → zagraj",
       you_said: "Ty:",
       ind_name_ma: "Trend (MA)",
       ind_name_vol: "Wolumen",
@@ -1727,9 +1731,24 @@
   }
 
   /* ---------------- HARD reads ---------------- */
+  let readsCursor = 0; // keyboard cursor over the reads list
+
   function readsComplete() {
     const keys = readKeys();
     return keys.every((k) => hardReads[k] === 1 || hardReads[k] === 0 || hardReads[k] === -1);
+  }
+
+  // keyboard tagging: 1=▲ 2=• 3=▼ on the cursor row, then advance
+  function tagCursorRead(dir) {
+    const keys = readKeys();
+    if (!keys.length) return;
+    if (readsCursor >= keys.length) readsCursor = 0;
+    hardReads[keys[readsCursor]] = dir;
+    // advance to the next untagged row (or just the next one)
+    const next = keys.findIndex((k, i) => i > readsCursor && hardReads[k] === undefined);
+    readsCursor = next !== -1 ? next : Math.min(readsCursor + 1, keys.length - 1);
+    renderReads();
+    updateCallGate();
   }
 
   function renderReads() {
@@ -1737,9 +1756,10 @@
     dom.reads.hidden = !show;
     if (!show) return;
     dom.readsList.innerHTML = "";
-    for (const k of readKeys()) {
+    const cursorKeys = readKeys();
+    for (const k of cursorKeys) {
       const li = document.createElement("li");
-      li.className = "read-row";
+      li.className = "read-row" + (cursorKeys[readsCursor] === k ? " cursor" : "");
 
       const name = document.createElement("span");
       name.className = "read-name";
@@ -1756,6 +1776,7 @@
         b.addEventListener("click", () => {
           if (busy || game.finished) return;
           hardReads[k] = dir;
+          readsCursor = readKeys().indexOf(k);
           renderReads();
           updateCallGate();
         });
@@ -1901,8 +1922,23 @@
       li.appendChild(dir);
       li.appendChild(txt);
       li.appendChild(verdict);
+      li.classList.add("an-clickable");
+      li.title = t("ind_name_" + sig.key);
+      li.addEventListener("click", () => highlightIndicator(sig.key));
       dom.anList.appendChild(li);
     }
+  }
+
+  // clicking an analysis row flashes the matching indicator panel/chart
+  function highlightIndicator(key) {
+    const target =
+      key === "rsi" ? dom.rsiWrap : key === "macd" ? dom.macdWrap : key === "stoch" ? dom.stochWrap : dom.chartWrap;
+    if (!target || target.hidden) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.classList.remove("flash-ind");
+    void target.offsetWidth; // restart animation
+    target.classList.add("flash-ind");
+    window.setTimeout(() => target.classList.remove("flash-ind"), 1300);
   }
 
   /* ---------------- Progress / score ---------------- */
@@ -2105,6 +2141,7 @@
     };
     lastAnalysis = null;
     hardReads = {};
+    readsCursor = 0;
     updateMetaTitle();
     refreshAll();
     closeAllModals();
@@ -2162,6 +2199,7 @@
     };
     lastAnalysis = null;
     hardReads = {};
+    readsCursor = 0;
     updateMetaTitle();
     refreshAll();
     if (game.finished) {
@@ -2189,6 +2227,7 @@
     };
     lastAnalysis = null;
     hardReads = {};
+    readsCursor = 0;
     updateMetaTitle();
     refreshAll();
     closeAllModals();
@@ -2303,6 +2342,7 @@
     };
     lastAnalysis = null;
     hardReads = {};
+    readsCursor = 0;
     updateMetaTitle();
     refreshAll();
     closeAllModals();
@@ -2369,6 +2409,7 @@
     };
 
     hardReads = {};
+    readsCursor = 0;
     renderCharts();
     renderProgress();
     renderScore();
@@ -2745,6 +2786,20 @@
       dom.btnPracticeRes.textContent =
         game.missionPassed && idx + 1 < MISSIONS.length ? t("mis_next") : t("res_again");
     } else dom.btnPracticeRes.textContent = t("res_practice");
+
+    // cross-sell the other daily variant (normal <-> HARD)
+    const otherBtn = $("#btn-other-daily");
+    if (game.mode === "daily") {
+      const other = Store.get(KEYS.daily(game.number, !game.hard), null);
+      if (!other || !other.finished) {
+        otherBtn.textContent = t(game.hard ? "other_daily_norm" : "other_daily_hard");
+        otherBtn.hidden = false;
+      } else {
+        otherBtn.hidden = true;
+      }
+    } else {
+      otherBtn.hidden = true;
+    }
     dom.sharePreview.hidden = true;
 
     startCountdown();
@@ -3459,6 +3514,12 @@
 
     $("#btn-share").addEventListener("click", doShare);
     $("#btn-share-img").addEventListener("click", doShareImage);
+    $("#btn-other-daily").addEventListener("click", () => {
+      prefs.hard = !prefs.hard;
+      savePrefs();
+      closeAllModals();
+      startDaily();
+    });
     dom.btnPracticeRes.addEventListener("click", () => {
       if (game && game.mode === "survival") startSurvival();
       else if (game && game.mode === "academy") {
@@ -3478,6 +3539,18 @@
       } else if (k === "arrowdown" || k === "s") {
         e.preventDefault();
         call(false);
+      } else if (!dom.reads.hidden && !busy && game && !game.finished) {
+        // HARD keyboard tagging: 1=▲ 2=• 3=▼, Tab handled natively
+        if (k === "1") {
+          e.preventDefault();
+          tagCursorRead(1);
+        } else if (k === "2") {
+          e.preventDefault();
+          tagCursorRead(0);
+        } else if (k === "3") {
+          e.preventDefault();
+          tagCursorRead(-1);
+        }
       }
     });
 

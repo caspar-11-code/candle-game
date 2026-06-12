@@ -601,6 +601,21 @@ body::before {
 .read-verdict.hit { color: var(--bull); }
 .read-verdict.miss { color: var(--bear); }
 
+.an-row.an-clickable { cursor: pointer; border-radius: 8px; transition: background .12s ease; }
+.an-row.an-clickable:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+.flash-ind { animation: flash-ind 1.2s ease; }
+@keyframes flash-ind {
+  0%, 100% { box-shadow: none; }
+  25% { box-shadow: 0 0 0 2px var(--accent), 0 0 24px color-mix(in srgb, var(--accent) 55%, transparent); }
+  60% { box-shadow: 0 0 0 2px var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 35%, transparent); }
+}
+
+.read-row.cursor { outline: 1.5px dashed var(--accent); outline-offset: 3px; border-radius: 6px; }
+
+.btn--cta { border-color: var(--hard); color: var(--hard); font-weight: 800; }
+.btn--cta:hover { background: color-mix(in srgb, var(--hard) 12%, transparent); border-color: var(--hard); }
+
 .an-you { color: var(--text-faint); font-size: 0.78rem; white-space: nowrap; }
 .an-you .hit { color: var(--bull); font-weight: 700; }
 .an-you .miss { color: var(--bear); font-weight: 700; }
