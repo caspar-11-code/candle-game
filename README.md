@@ -7,21 +7,34 @@ volatility, then call whether the next candle closes **green (bull)** or
 **red (bear)**. Six calls per day. Beat the market (4/6+) to keep your streak,
 then share your result as emoji squares — Wordle, for markets.
 
-**v2 — the indicator toolkit.** The chart now ships with a real technical
-toolbox, computed with textbook formulas and zero lookahead:
+**The full toolkit** (all computed client-side with textbook formulas, zero
+lookahead): SMA20/EMA9, RSI(14), MACD(12,26,9), volume + average, auto
+support/resistance (ATR-clustered swing pivots), Bollinger(20,2),
+slow Stochastic(14,3,3) and Fibonacci retracements of the dominant swing.
 
-- **SMA20 / EMA9** moving-average overlays (trend + crossovers)
-- **RSI(14)** (Wilder) sub-panel with 30/70 bands
-- **MACD(12,26,9)** sub-panel (line, signal, histogram)
-- **Volume** bars with a 10-period average line
-- **Support / resistance** detected from swing pivots, clustered by ATR(14)
+**Game modes**
 
-After **every** round the game explains itself: each indicator's reading at
-the moment of your call, whether it pointed the right way (✓/✗), and an
-honest verdict — including "your read was right and the market broke the
-pattern anyway", because that's how markets actually work. **Practice mode**
-is unlimited with difficulty levels (pure price action → averages → momentum
-→ full pro toolkit). UI is bilingual (EN/PL, auto-detected, switchable).
+- **Daily** — one deterministic chart per day, same for everyone; separate
+  normal and **HARD** streaks (in HARD you must tag every indicator ▲/•/▼
+  before each call and your reads get graded; keys `1/2/3`).
+- **Practice** — unlimited random charts, 6 difficulty levels, plus a
+  **🌍 real-market mode**: anonymized fragments of real BTC/ETH/BNB/XRP/
+  DOGE/SOL history (free Binance public API, 1D/4H/1H), revealed with
+  dates after the round.
+- **Survival** — endless rounds, 3 lives, sliding window, per-flavor
+  records, milestones every 10 hits. Works with ⚡BLITZ (decision timer)
+  and real-market data.
+- **Academy** — 10 progressive missions (pure price action → each tool →
+  final exam) with a downloadable certificate.
+
+**Learning loop**: after every round a breakdown explains what each
+indicator was saying (✓/✗ vs the actual candle) with an honest verdict —
+including "your read was right and the market broke the pattern anyway".
+Lesson of the day (24 bite-size lessons), per-indicator read accuracy with
+a recommended lesson for your weakest tool, post-game equity curve vs
+buy & hold, calendar heatmap, 10 badges, streak shield (one missed day
+forgiven per 30 days), PNG share images and full progress export/import.
+UI is bilingual (EN/PL, auto-detected, switchable).
 
 It's a **single static web app**: HTML + CSS + JS, no build step, no backend,
 no third-party code, no network calls. That makes it trivial to host and gives
