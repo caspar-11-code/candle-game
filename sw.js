@@ -1,6 +1,6 @@
 /* CANDLE service worker — offline app shell, stale-while-revalidate.
    Bump CACHE when you ship changes to force clients to update. */
-const CACHE = "candle-v8";
+const CACHE = "candle-v9";
 const ASSETS = [
   "./",
   "./index.html",
@@ -8,6 +8,8 @@ const ASSETS = [
   "./app.js",
   "./manifest.webmanifest",
   "./icon.svg",
+  "./icon-192.png",
+  "./icon-512.png",
 ];
 
 self.addEventListener("install", (event) => {

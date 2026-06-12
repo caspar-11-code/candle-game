@@ -10,6 +10,8 @@
 "use strict";
 
 (function () {
+  const APP_VERSION = "v6";
+
   /* ---------------- Config ---------------- */
   const CONFIG = {
     WARMUP: 50,
@@ -1907,6 +1909,7 @@
   function renderProgress() {
     const ol = dom.progress;
     while (ol.firstChild) ol.removeChild(ol.firstChild);
+    if (academyListOpen) return;
     if (game.mode === "survival") {
       const li = document.createElement("li");
       li.className = "sur-lives";
@@ -2054,6 +2057,7 @@
     stopTimer();
     academyListOpen = true;
     closeAllModals();
+    dom.progress.innerHTML = "";
     renderAcademyList();
     dom.academyList.hidden = false;
     setGameAreaHidden(true);
@@ -3513,6 +3517,8 @@
     wire();
     applyLang();
     backfillHistory();
+    const ver = $("#app-version");
+    if (ver) ver.textContent = APP_VERSION;
     startDaily();
 
     if (!prefs.seenHelp) {
