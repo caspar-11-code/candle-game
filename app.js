@@ -10,7 +10,7 @@
 "use strict";
 
 (function () {
-  const APP_VERSION = "v9";
+  const APP_VERSION = "v10";
 
   /* ---------------- Config ---------------- */
   const CONFIG = {
@@ -288,6 +288,9 @@
       review_final: "📽️ Replay — drag to step through the round",
       review_round: "Round {r}/{n}",
       cb_label: "Colorblind-friendly mode",
+      tt_sound: "Toggle sound",
+      tt_theme: "Toggle theme",
+      tt_lang: "Language",
       tour_skip: "Skip",
       tour_next: "Next",
       tour_done: "Play!",
@@ -536,6 +539,9 @@
       review_final: "📽️ Powtórka — przeciągnij, by przejść rundę po rundzie",
       review_round: "Runda {r}/{n}",
       cb_label: "Tryb przyjazny daltonistom",
+      tt_sound: "Dźwięk wł/wył",
+      tt_theme: "Zmień motyw",
+      tt_lang: "Język",
       tour_skip: "Pomiń",
       tour_next: "Dalej",
       tour_done: "Gramy!",
@@ -1277,8 +1283,10 @@
   }
   function displayedInds() {
     const act = activeIndSet();
-    // Academy missions must always show their tools, regardless of chip toggles
-    if (game && game.mode === "academy") return act;
+    // Daily is the canonical shared puzzle and Academy missions teach a fixed
+    // toolset — both must show every relevant indicator regardless of the chip
+    // toggles (which are a personal practice/survival convenience only).
+    if (game && (game.mode === "academy" || game.mode === "daily")) return act;
     return new Set(ALL_INDS.filter((k) => act.has(k) && prefs.indOn[k]));
   }
   function readKeys() {
@@ -2103,7 +2111,8 @@
       b.hidden = !act.has(k);
       b.setAttribute("aria-pressed", String(prefs.indOn[k] !== false));
     });
-    dom.indbar.hidden = act.size === 0 || mode === "academy";
+    // chips are a personal convenience — only in practice & survival
+    dom.indbar.hidden = act.size === 0 || mode === "academy" || mode === "daily";
   }
 
   /* ---------------- Academy ---------------- */
@@ -2338,6 +2347,9 @@
       readsByKey: saved && saved.readsByKey && typeof saved.readsByKey === "object" ? saved.readsByKey : {},
       lives: 0,
     };
+    // self-heal a corrupted/tampered save: round and results always advance
+    // together, so round can never exceed how many results were stored.
+    if (game.round > game.results.length) game.round = game.results.length;
     // reconstruct per-round calls for a restored finished daily (for the replay label)
     game.results.forEach((correct, r) => {
       const bull = game.series[VIS_START + CONFIG.HISTORY + r].bull;
@@ -3798,6 +3810,19 @@
     $$("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
     $$("[data-i18n-html]").forEach((el) => (el.innerHTML = t(el.dataset.i18nHtml)));
     dom.helpBody.innerHTML = t("help_html");
+    // localized tooltips / aria-labels for the toolbar (icon buttons have no text)
+    const tip = (id, key) => {
+      const el = $(id);
+      if (!el) return;
+      el.title = t(key);
+      el.setAttribute("aria-label", t(key));
+    };
+    tip("#btn-help", "help_title");
+    tip("#btn-stats", "stats_title");
+    tip("#btn-sound", "tt_sound");
+    tip("#btn-theme", "tt_theme");
+    tip("#btn-cb", "cb_label");
+    tip("#btn-lang", "tt_lang");
     if (game) {
       updateMetaTitle();
       renderScore();
