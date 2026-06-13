@@ -903,6 +903,64 @@ body::before {
   cursor: pointer;
 }
 
+/* ---------- Colorblind-friendly mode (blue/orange + hollow bull bodies) ---------- */
+[data-cb="1"] {
+  --bull: #2e8bff;
+  --bull-dim: #1f5fb0;
+  --bear: #ff7a18;
+  --bear-dim: #b8530a;
+}
+/* hollow up-candles add a shape cue on top of the hue change */
+[data-cb="1"] .chart .candle.bull .body { fill: var(--panel-2); stroke: var(--bull); stroke-width: 1.4; }
+
+/* ---------- Replay scrubber ---------- */
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  padding: 10px 14px;
+}
+.review-label { margin: 0; font-size: 0.82rem; color: var(--text-dim); }
+.review-label .rv-hit { color: var(--bull); font-weight: 700; }
+.review-label .rv-miss { color: var(--bear); font-weight: 700; }
+.review-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
+
+/* ---------- Onboarding tour ---------- */
+.tour { position: fixed; inset: 0; z-index: 200; }
+.tour-spot {
+  position: fixed;
+  border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(4, 7, 13, 0.8);
+  transition: top .25s ease, left .25s ease, width .25s ease, height .25s ease;
+  pointer-events: none;
+}
+.tour-box {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 32px));
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  transition: top .25s ease;
+}
+.tour-text { margin: 0 0 12px; font-size: 0.95rem; line-height: 1.5; color: var(--text); }
+.tour-nav { display: flex; align-items: center; justify-content: space-between; }
+.tour-count { font-family: var(--ff-mono); font-size: 0.78rem; color: var(--text-faint); }
+.tour-skip {
+  background: none; border: none; color: var(--text-dim); cursor: pointer;
+  font-family: inherit; font-size: 0.84rem; text-decoration: underline; text-underline-offset: 3px;
+}
+.tour-next {
+  border: none; background: var(--accent); color: #fff; font-weight: 700; font-family: inherit;
+  padding: 9px 18px; border-radius: 10px; cursor: pointer; font-size: 0.88rem;
+}
+
 .backup-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
 .backup-row .btn { font-size: 0.82rem; padding: 10px 8px; }
 

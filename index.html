@@ -62,6 +62,9 @@
       <button id="btn-theme" class="icon-btn" type="button" aria-label="Toggle theme" title="Toggle theme">
         <span aria-hidden="true">◑</span>
       </button>
+      <button id="btn-cb" class="icon-btn" type="button" aria-pressed="false" aria-label="Colorblind-friendly mode" title="Colorblind-friendly mode">
+        <span aria-hidden="true">👓</span>
+      </button>
     </nav>
   </header>
 
@@ -166,6 +169,11 @@
         <p id="score" class="score">Score <strong>0</strong> / 6</p>
         <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
       </div>
+
+      <section id="review" class="review" hidden>
+        <p id="review-label" class="review-label"></p>
+        <input id="review-slider" class="review-slider" type="range" min="0" max="6" step="1" value="6" aria-label="Replay position" />
+      </section>
 
       <section id="analysis" class="analysis" hidden aria-live="polite">
         <h3 id="analysis-title">—</h3>
@@ -288,6 +296,19 @@
 
   <!-- live region for transient announcements -->
   <p id="aria-live" class="visually-hidden" aria-live="assertive"></p>
+
+  <!-- onboarding tour overlay -->
+  <div id="tour" class="tour" hidden>
+    <div id="tour-spot" class="tour-spot"></div>
+    <div id="tour-box" class="tour-box">
+      <p id="tour-text" class="tour-text"></p>
+      <div class="tour-nav">
+        <button id="tour-skip" type="button" class="tour-skip" data-i18n="tour_skip">Skip</button>
+        <span id="tour-count" class="tour-count"></span>
+        <button id="tour-next" type="button" class="tour-next" data-i18n="tour_next">Next</button>
+      </div>
+    </div>
+  </div>
 
   <!-- new version available -->
   <div id="update-toast" class="update-toast" hidden>

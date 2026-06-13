@@ -10,7 +10,7 @@
 "use strict";
 
 (function () {
-  const APP_VERSION = "v8";
+  const APP_VERSION = "v9";
 
   /* ---------------- Config ---------------- */
   const CONFIG = {
@@ -285,6 +285,16 @@
       upd_text: "New version ready",
       upd_btn: "Refresh",
       heat_none: "none",
+      review_final: "📽️ Replay — drag to step through the round",
+      review_round: "Round {r}/{n}",
+      cb_label: "Colorblind-friendly mode",
+      tour_skip: "Skip",
+      tour_next: "Next",
+      tour_done: "Play!",
+      tour_1: "This is the price chart. Read the recent candles — trend, momentum, volatility.",
+      tour_2: "The next candle prints right after the LIVE line. Will it close green (up) or red (down)?",
+      tour_3: "Make your call: BULL for green, BEAR for red. After each round the game explains what the chart was saying.",
+      tour_4: "Tabs switch modes (Daily, Practice, Survival, Academy). Everything is explained under ❓. Good luck!",
       sur_milestone: "🎉 {n} hits — keep going!",
       cert_title: "CERTIFICATE",
       cert_sub: "CANDLE Academy — course completion",
@@ -523,6 +533,16 @@
       upd_text: "Nowa wersja gotowa",
       upd_btn: "Odśwież",
       heat_none: "nie grano",
+      review_final: "📽️ Powtórka — przeciągnij, by przejść rundę po rundzie",
+      review_round: "Runda {r}/{n}",
+      cb_label: "Tryb przyjazny daltonistom",
+      tour_skip: "Pomiń",
+      tour_next: "Dalej",
+      tour_done: "Gramy!",
+      tour_1: "To wykres ceny. Czytaj ostatnie świece — trend, momentum, zmienność.",
+      tour_2: "Następna świeca pojawi się tuż za linią LIVE. Zamknie się na zielono (wzrost) czy na czerwono (spadek)?",
+      tour_3: "Typuj: BULL = zielona, BEAR = czerwona. Po każdej rundzie gra wyjaśnia, co mówił wykres.",
+      tour_4: "Zakładki zmieniają tryby (Dzienna, Trening, Survival, Akademia). Wszystko opisane pod ❓. Powodzenia!",
       sur_milestone: "🎉 {n} trafień — tak trzymać!",
       cert_title: "CERTYFIKAT",
       cert_sub: "Akademia CANDLE — ukończenie kursu",
@@ -1045,6 +1065,8 @@
       sound: true,
       theme: "dark",
       seenHelp: false,
+      seenTour: false,
+      cb: false,
       lang: nav.startsWith("pl") ? "pl" : "en",
       practiceLevel: 1,
       hard: false,
@@ -1059,6 +1081,8 @@
     d.sound = raw.sound !== false;
     d.theme = raw.theme === "light" ? "light" : "dark";
     d.seenHelp = raw.seenHelp === true;
+    d.seenTour = raw.seenTour === true;
+    d.cb = raw.cb === true;
     d.lang = raw.lang === "pl" ? "pl" : raw.lang === "en" ? "en" : d.lang;
     d.practiceLevel = clampInt(raw.practiceLevel, 1, LEVELS.length) || 1;
     d.hard = raw.hard === true;
@@ -1131,6 +1155,7 @@
 
   let game = null;
   let lastAnalysis = null;
+  let reviewIndex = null; // post-game replay scrubber position (null = full final chart)
   let hardReads = {};
   let practiceCounter = 0;
   let survivalCounter = 0;
@@ -1225,6 +1250,15 @@
     equitySvg: $("#equity-svg"),
     newBadges: $("#new-badges"),
     btnPracticeRes: $("#btn-practice"),
+    review: $("#review"),
+    reviewSlider: $("#review-slider"),
+    reviewLabel: $("#review-label"),
+    tour: $("#tour"),
+    tourSpot: $("#tour-spot"),
+    tourBox: $("#tour-box"),
+    tourText: $("#tour-text"),
+    tourNext: $("#tour-next"),
+    tourCount: $("#tour-count"),
   };
 
   function announce(msg) {
@@ -1252,8 +1286,19 @@
   }
 
   /* ---------------- Geometry / view window ---------------- */
+  // post-game replay: when set (0..ROUNDS-1) the fixed-window modes redraw
+  // the chart up to that prediction round so you can study what you saw.
+  function reviewing() {
+    return game.finished && reviewIndex != null && reviewIndex < CONFIG.ROUNDS && !reviewSurvivalBlocked();
+  }
+  function reviewSurvivalBlocked() {
+    return game.mode === "survival";
+  }
+  function effectiveRound() {
+    return reviewing() ? reviewIndex : game.round;
+  }
   function revealedTotal() {
-    return CONFIG.HISTORY + game.round;
+    return CONFIG.HISTORY + effectiveRound();
   }
   function lastRevealedAbs() {
     return VIS_START + revealedTotal() - 1;
@@ -1272,12 +1317,13 @@
         placeholder: !game.finished,
       };
     }
-    const nShow = game.finished ? VISIBLE : Math.min(VISIBLE, revealed);
+    const rev = reviewing();
+    const nShow = rev ? revealed : game.finished ? VISIBLE : Math.min(VISIBLE, revealed);
     return {
       winStart: VIS_START,
       nShow,
       divSlot: CONFIG.HISTORY,
-      placeholder: !game.finished && nShow < VISIBLE,
+      placeholder: rev ? true : !game.finished && nShow < VISIBLE,
     };
   }
   function chartGeom() {
@@ -2219,6 +2265,7 @@
       ind: computeIndicators(series),
       round: 0,
       results: [],
+      preds: [],
       finished: false,
       readsCorrect: 0,
       readsTotal: 0,
@@ -2227,6 +2274,7 @@
       missionPassed: false,
     };
     lastAnalysis = null;
+    reviewIndex = null;
     hardReads = {};
     readsCursor = 0;
     updateMetaTitle();
@@ -2283,13 +2331,20 @@
       ind: computeIndicators(series),
       round: saved ? clampInt(saved.round, 0, CONFIG.ROUNDS) : 0,
       results: saved && Array.isArray(saved.results) ? saved.results.map(Boolean).slice(0, CONFIG.ROUNDS) : [],
+      preds: [],
       finished: saved ? !!saved.finished : false,
       readsCorrect: saved ? clampInt(saved.readsCorrect, 0, 999) : 0,
       readsTotal: saved ? clampInt(saved.readsTotal, 0, 999) : 0,
       readsByKey: saved && saved.readsByKey && typeof saved.readsByKey === "object" ? saved.readsByKey : {},
       lives: 0,
     };
+    // reconstruct per-round calls for a restored finished daily (for the replay label)
+    game.results.forEach((correct, r) => {
+      const bull = game.series[VIS_START + CONFIG.HISTORY + r].bull;
+      game.preds[r] = (correct ? bull : !bull) ? 1 : -1;
+    });
     lastAnalysis = null;
+    reviewIndex = null;
     hardReads = {};
     readsCursor = 0;
     updateMetaTitle();
@@ -2310,6 +2365,7 @@
       ind: computeIndicators(series),
       round: 0,
       results: [],
+      preds: [],
       finished: false,
       readsCorrect: 0,
       readsTotal: 0,
@@ -2320,6 +2376,7 @@
       challenge: !!isChallenge,
     };
     lastAnalysis = null;
+    reviewIndex = null;
     hardReads = {};
     readsCursor = 0;
     updateMetaTitle();
@@ -2433,6 +2490,7 @@
       ind: computeIndicators(series),
       round: 0,
       results: [],
+      preds: [],
       finished: false,
       readsCorrect: 0,
       readsTotal: 0,
@@ -2441,6 +2499,7 @@
       real: real || null,
     };
     lastAnalysis = null;
+    reviewIndex = null;
     hardReads = {};
     readsCursor = 0;
     updateMetaTitle();
@@ -2481,8 +2540,44 @@
     renderReads();
     setControls(!game.finished);
     scheduleTimer();
+    renderReview();
     dom.feedback.textContent = "";
     dom.feedback.className = "feedback";
+  }
+
+  /* ---------------- Post-game replay scrubber ---------------- */
+  function renderReview() {
+    const show = game && game.finished && game.mode !== "survival";
+    dom.review.hidden = !show;
+    if (!show) return;
+    const slider = dom.reviewSlider;
+    slider.max = String(CONFIG.ROUNDS);
+    if (reviewIndex == null) slider.value = String(CONFIG.ROUNDS);
+    updateReviewLabel();
+  }
+
+  function updateReviewLabel() {
+    const r = reviewIndex; // null or 0..ROUNDS-1
+    if (r == null || r >= CONFIG.ROUNDS) {
+      dom.reviewLabel.textContent = t("review_final");
+      dom.reviewLabel.className = "review-label";
+      return;
+    }
+    const bull = game.series[VIS_START + CONFIG.HISTORY + r].bull;
+    const call = game.preds[r];
+    const correct = game.results[r];
+    const word = t(bull ? "w_green" : "w_red");
+    const youSym = call > 0 ? "▲" : call < 0 ? "▼" : "•";
+    dom.reviewLabel.innerHTML = `${t("review_round", { r: r + 1, n: CONFIG.ROUNDS })} · ${t("you_said")} ${youSym} · <span class="${correct ? "rv-hit" : "rv-miss"}">${word} ${correct ? "✓" : "✗"}</span>`;
+    dom.reviewLabel.className = "review-label";
+  }
+
+  function setReview(idx) {
+    // idx === ROUNDS (or null) => full final chart; 0..ROUNDS-1 => step before that reveal
+    reviewIndex = idx >= CONFIG.ROUNDS ? null : Math.max(0, idx);
+    dom.reviewSlider.value = String(idx >= CONFIG.ROUNDS ? CONFIG.ROUNDS : reviewIndex);
+    renderCharts();
+    updateReviewLabel();
   }
 
   function roundsLeft() {
@@ -2517,6 +2612,7 @@
     const target = game.series[VIS_START + CONFIG.HISTORY + game.round];
     const correct = isTimeout ? false : target.bull === predictBull;
     game.results.push(correct);
+    game.preds.push(isTimeout ? 0 : predictBull ? 1 : -1);
     game.round += 1;
     if (game.mode === "survival" && !correct) game.lives -= 1;
 
@@ -2612,9 +2708,11 @@
     stopTimer();
     dom.timer.hidden = true;
     setControls(false);
+    reviewIndex = null;
     renderCharts();
     renderProgress();
     renderReads();
+    renderReview();
 
     let surNewRecord = false;
     if (game.mode === "daily") {
@@ -3631,6 +3729,69 @@
   function applySound() {
     $("#btn-sound").setAttribute("aria-pressed", String(prefs.sound));
   }
+  function applyCb() {
+    document.documentElement.setAttribute("data-cb", prefs.cb ? "1" : "0");
+    const btn = $("#btn-cb");
+    if (btn) btn.setAttribute("aria-pressed", String(prefs.cb));
+    if (game) renderCharts();
+  }
+
+  /* ---------------- Onboarding tour ---------------- */
+  const TOUR_STEPS = [
+    { sel: "#chart-wrap", key: "tour_1" },
+    { sel: "#chart-wrap", key: "tour_2", spot: "live" },
+    { sel: "#controls", key: "tour_3" },
+    { sel: ".tabs", key: "tour_4" },
+  ];
+  let tourStep = 0;
+  function startTour() {
+    tourStep = 0;
+    dom.tour.hidden = false;
+    showTourStep();
+    window.addEventListener("resize", positionTour);
+  }
+  function endTour() {
+    dom.tour.hidden = true;
+    window.removeEventListener("resize", positionTour);
+    prefs.seenTour = true;
+    prefs.seenHelp = true;
+    savePrefs();
+  }
+  function showTourStep() {
+    const step = TOUR_STEPS[tourStep];
+    dom.tourText.textContent = t(step.key);
+    dom.tourNext.textContent = t(tourStep === TOUR_STEPS.length - 1 ? "tour_done" : "tour_next");
+    dom.tourCount.textContent = `${tourStep + 1}/${TOUR_STEPS.length}`;
+    const target = document.querySelector(step.sel);
+    if (target && target.scrollIntoView) target.scrollIntoView({ block: "center" });
+    // position synchronously (robust even when timers/rAF are throttled in a
+    // backgrounded tab), then refine once the scroll has settled.
+    positionTour();
+    window.setTimeout(positionTour, 80);
+    window.setTimeout(positionTour, 360);
+  }
+  function positionTour() {
+    if (dom.tour.hidden) return;
+    const step = TOUR_STEPS[tourStep];
+    const target = document.querySelector(step.sel);
+    if (!target) return;
+    const r = target.getBoundingClientRect();
+    const pad = 6;
+    const spot = dom.tourSpot;
+    spot.style.left = r.left - pad + "px";
+    spot.style.top = r.top - pad + "px";
+    spot.style.width = r.width + pad * 2 + "px";
+    spot.style.height = r.height + pad * 2 + "px";
+    // place the box below the target if there's room, else above
+    const box = dom.tourBox;
+    const bh = box.offsetHeight || 130;
+    const vh = window.innerHeight;
+    const below = r.bottom + 12;
+    const above = r.top - bh - 12;
+    const top = below + bh < vh ? below : Math.max(12, above);
+    box.style.top = top + "px";
+  }
+
   function applyLang() {
     document.documentElement.lang = prefs.lang;
     $("#btn-lang").textContent = prefs.lang.toUpperCase();
@@ -3762,6 +3923,20 @@
       savePrefs();
       applyLang();
     });
+    $("#btn-cb").addEventListener("click", () => {
+      prefs.cb = !prefs.cb;
+      applyCb();
+      savePrefs();
+    });
+
+    // replay scrubber + tour controls
+    dom.reviewSlider.addEventListener("input", (e) => setReview(Number(e.target.value)));
+    dom.tourNext.addEventListener("click", () => {
+      tourStep += 1;
+      if (tourStep >= TOUR_STEPS.length) endTour();
+      else showTourStep();
+    });
+    $("#tour-skip").addEventListener("click", endTour);
 
     $("#btn-share").addEventListener("click", doShare);
     $("#btn-share-img").addEventListener("click", doShareImage);
@@ -3871,6 +4046,7 @@
   function init() {
     applyTheme();
     applySound();
+    applyCb();
     wire();
     applyLang();
     backfillHistory();
@@ -3888,7 +4064,10 @@
     if (challengeSeed) startPractice(challengeSeed);
     else startDaily();
 
-    if (!prefs.seenHelp) {
+    // first-ever visit: interactive tour (skip if arriving via a challenge link or a finished daily)
+    if (!prefs.seenTour && !challengeSeed && !game.finished) {
+      startTour();
+    } else if (!prefs.seenHelp) {
       prefs.seenHelp = true;
       savePrefs();
       if (!game.finished) showModal(dom.help);

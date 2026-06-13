@@ -1,6 +1,6 @@
 /* CANDLE service worker — offline app shell, stale-while-revalidate.
    Bump CACHE when you ship changes to force clients to update. */
-const CACHE = "candle-v12";
+const CACHE = "candle-v13";
 const ASSETS = [
   "./",
   "./index.html",
